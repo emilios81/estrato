@@ -48,7 +48,8 @@ button,input,select{font:inherit;color:inherit}
 
 /* Barra superior */
 header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding-block:10px;border-bottom:1px solid var(--line);background:var(--surface)}
-.brand{display:flex;align-items:baseline;gap:8px;margin-right:auto;min-width:0}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+#spaceSel{min-height:38px;font-weight:600;border-color:var(--accent);color:var(--accent)}
 .brand b{font-family:var(--f-display);font-weight:600;font-size:22px;letter-spacing:.2px}
 .brand span{color:var(--muted);font-size:13px;white-space:nowrap}
 .tools{display:flex;flex-wrap:wrap;gap:8px}
@@ -128,6 +129,10 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
 .chip[aria-current="true"] i{color:var(--accent-ink);opacity:.8}
 .chip.ghost{border-style:dashed;border-color:var(--accent)}
 .empty-tl{color:var(--muted);font-size:14px}
+.choose{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;width:100%}
+.btn.choice{flex-direction:column;align-items:flex-start;justify-content:center;white-space:normal;text-align:left;padding:14px;min-height:84px;gap:4px}
+.choice b{font-size:16px}
+.choice span{color:var(--muted);font-size:13px}
 
 #toast{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:var(--r);font-size:14px;max-width:calc(100% - 32px);z-index:20}
 
@@ -147,10 +152,12 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
 <body>
 <div id="app">
   <header class="gutter">
-    <div class="brand"><b>Estrato</b><span>Visor de fases de excavación</span></div>
+    <div class="brand"><b>Estrato</b>
+      <select id="spaceSel" aria-label="Modo de trabajo"><option value="exc">Excavación</option><option value="lab">Laboratorio</option></select>
+      <span id="brandSub">Visor de fases de excavación</span></div>
     <div class="tools">
       <button class="btn primary" id="btnLoad" type="button" title="Agregar modelos GLB u ortomosaicos">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span class="lbl">Agregar capas</span></button>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span class="lbl" id="btnLoadLbl">Agregar capas</span></button>
       <button class="btn" id="btnFit" type="button" title="Encuadrar todo">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="lbl">Encuadrar</span></button>
       <button class="btn" id="btnTop" type="button" title="Vista en planta">
@@ -166,17 +173,27 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
       <div class="badge" id="sampleBadge" hidden><strong>Ejemplo</strong> · modelos generados para mostrar el visor. Se quitan al agregar los tuyos.</div>
       <div class="overlay" id="emptyOv" hidden>
         <div class="box">
-          <h2>Cargá tus modelos de excavación</h2>
-          <p>Agregá los GLB exportados de Metashape (uno por fase) y, si querés, el ortomosaico del dron en JPG o PNG. También podés arrastrarlos acá.</p>
+          <h2 id="emptyH">Cargá tus modelos de excavación</h2>
+          <p id="emptyP">Agregá los GLB exportados de Metashape (uno por fase) y, si querés, el ortomosaico del dron en JPG o PNG. También podés arrastrarlos acá.</p>
           <div class="row"><button class="btn primary" id="emptyLoad" type="button">Agregar capas</button><button class="btn" id="emptySample" type="button">Ver el ejemplo</button></div>
         </div>
       </div>
       <div class="overlay" id="loadOv" hidden><div class="box"><div class="spinner" aria-hidden="true"></div><p id="loadTxt">Cargando…</p></div></div>
+      <div class="overlay" id="chooseOv" hidden>
+        <div class="box">
+          <h2>¿Qué vas a mirar?</h2>
+          <p>Cada modo guarda sus propios modelos. Podés cambiar cuando quieras desde el menú de arriba.</p>
+          <div class="choose">
+            <button class="btn choice" type="button" data-space="exc"><b>Excavación</b><span>Sitio, dron y fases de excavación, superpuestas</span></button>
+            <button class="btn choice" type="button" data-space="lab"><b>Laboratorio</b><span>Vasijas, piezas y objetos sueltos, de a uno</span></button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <aside class="gutter" id="panel">
       <section>
-        <div class="sec-h"><h3>Capas</h3><span class="meta" id="layerCount"></span></div>
+        <div class="sec-h"><h3 id="layersH">Capas</h3><span class="meta" id="layerCount"></span></div>
         <div class="layers" id="layers"></div>
       </section>
 
@@ -189,19 +206,25 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
           <label class="field" for="az">Dirección <input type="range" id="az" min="0" max="360" step="5"><output id="azOut"></output></label>
           <label class="field" for="el">Altura del sol <input type="range" id="el" min="3" max="80" step="1"><output id="elOut"></output></label>
         </div>
-        <label class="field" for="ex">Exag. vertical <input type="range" id="ex" min="1" max="4" step="0.25"><output id="exOut"></output></label>
-        <label class="check"><input type="checkbox" id="gridChk"> Grilla de 1 m</label>
+        <label class="field" for="ex" id="exRow">Exag. vertical <input type="range" id="ex" min="1" max="4" step="0.25"><output id="exOut"></output></label>
+        <label class="check"><input type="checkbox" id="gridChk"> <span id="gridLbl">Grilla de 1 m</span></label>
       </section>
 
       <section>
         <details class="help">
           <summary>Cómo preparar los archivos</summary>
-          <ol>
-            <li>En Metashape: <b>File › Export › Export Model</b> y elegí <code>Binary glTF (*.glb)</code>. Un archivo por fase.</li>
-            <li>Procesá todas las fases con la <b>misma referencia</b> (mismos marcadores o coordenadas). Así quedan superpuestas solas, sin tocar nada.</li>
-            <li>Para la tablet, diezmá la malla a menos de 1 millón de caras y usá textura de 4096 px.</li>
-            <li>El ortomosaico va como JPG o PNG. Indicá su ancho en metros en <b>Ajustar posición</b> y movelo hasta que calce.</li>
+          <ol id="helpExc">
+            <li>En Metashape: <b>Archivo › Exportar › Exportar modelo</b> y elegí <code>Binary glTF (*.glb)</code>. Un archivo por fase.</li>
+            <li>Procesá todas las fases en el <b>mismo proyecto</b> o con los <b>mismos puntos de referencia</b> (clavos, dianas). No hace falta georreferenciar: así quedan superpuestas solas.</li>
+            <li>Para la tablet, diezmá la malla a menos de 1 millón de caras (<b>Herramientas › Malla › Diezmar malla</b>) y usá textura de 4096 px.</li>
+            <li>El ortomosaico va como JPG o PNG y se calza solo al tamaño de los modelos. Si no coincide, ajustalo en <b>Ajustar posición</b>.</li>
             <li>Si un modelo aparece acostado, usá <b>Girar 90°</b> en su capa.</li>
+          </ol>
+          <ol id="helpLab" hidden>
+            <li>En Metashape: <b>Archivo › Exportar › Exportar modelo</b> y elegí <code>Binary glTF (*.glb)</code>. Un archivo por pieza.</li>
+            <li>No hace falta georreferenciar: cada pieza se centra sola y se apoya en una grilla a su escala.</li>
+            <li>Elegí qué pieza ver en la barra de abajo o tocando su tarjeta.</li>
+            <li>Si una pieza aparece acostada, usá <b>Girar 90°</b> en <b>Ajustar</b>.</li>
           </ol>
         </details>
       </section>
@@ -217,7 +240,7 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
   <footer class="gutter">
     <div class="tl-top">
       <div class="tl-name" id="tlName">—</div>
-      <div class="seg" role="group" aria-label="Modo de secuencia">
+      <div class="seg" role="group" aria-label="Modo de secuencia" id="modeSeg">
         <button type="button" data-mode="solo" title="Mostrar solo la fase elegida">Sola</button><button type="button" data-mode="anterior" title="Fase elegida con la anterior en transparencia">Con anterior</button><button type="button" data-mode="todas" title="Todas las fases visibles">Todas</button>
       </div>
       <div class="tl-ctrl">
@@ -254,7 +277,9 @@ if(!window.THREE||!THREE.GLTFLoader||!THREE.OrbitControls){
 }
 
 /* ---------- Estado ---------- */
-const S={layers:[],origin:null,cur:0,mode:"anterior",light:"rel",az:135,el:22,ex:1,grid:true};
+// space: "exc" (sitio y fases superpuestas) o "lab" (piezas sueltas, de a una y centradas)
+const S={space:"exc",layers:[],origin:null,cur:0,mode:"anterior",light:"rel",az:135,el:22,ex:1,grid:true};
+const LAB=()=>S.space==="lab";
 let toastT=null;
 function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200)}
 
@@ -289,10 +314,13 @@ function prepare(obj){
   obj.traverse(o=>{
     if(!o.isMesh)return;
     const src=Array.isArray(o.material)?o.material:[o.material];
-    const vc=!!(o.geometry&&o.geometry.attributes.color);
+    const g=o.geometry,vc=!!(g&&g.attributes.color);
+    // Metashape no exporta normales: sin ellas la luz rasante deja el modelo negro
+    if(g&&!g.attributes.normal)g.computeVertexNormals();
     const tex=[],rel=[];
     src.forEach(m=>{
-      const p={map:m.map||null,color:m.map?new THREE.Color(0xffffff):(m.color?m.color.clone():new THREE.Color(0xcccccc)),vertexColors:vc,side:THREE.DoubleSide};
+      // Con textura, el color por vértice de Metashape la oscurece: se usa solo si no hay textura
+      const p={map:m.map||null,color:m.map?new THREE.Color(0xffffff):(m.color?m.color.clone():new THREE.Color(0xcccccc)),vertexColors:vc&&!m.map,side:THREE.DoubleSide};
       tex.push(new THREE.MeshBasicMaterial(p));
       rel.push(new THREE.MeshStandardMaterial(Object.assign({},p,{roughness:1,metalness:0})));
     });
@@ -316,9 +344,18 @@ function placeSun(){
 }
 
 /* ---------- Capas ---------- */
-function phases(){return S.layers.filter(l=>l.role==="fase")}
+function phases(){return LAB()?S.layers:S.layers.filter(l=>l.role==="fase")}
 function applyTransform(l){
   if(!l.obj)return;
+  if(LAB()){
+    // Cada pieza se centra sola sobre su propia caja y se apoya en el piso, venga con las coordenadas que venga
+    l.obj.position.set(0,0,0);l.obj.rotation.set(0,l.rot*Math.PI/180,0);l.obj.scale.set(1,1,1);
+    const inner=l.obj.children[0];if(inner)inner.rotation.x=-(l.rx||0)*Math.PI/2;
+    l.obj.updateMatrixWorld(true);
+    const b=new THREE.Box3().setFromObject(l.obj);
+    if(!b.isEmpty()){const c=b.getCenter(new THREE.Vector3());l.obj.position.set(-c.x+l.dx,-b.min.y+l.dy,-c.z+l.dz)}
+    return;
+  }
   const o=S.origin||new THREE.Vector3();
   const base=l.kind==="model"?new THREE.Vector3():o;
   l.obj.position.set(base.x+l.dx,base.y+l.dy,base.z+l.dz);
@@ -327,14 +364,15 @@ function applyTransform(l){
   const s=(l.kind==="image"||l.plane)?l.width:1;l.obj.scale.set(s,s,s);
 }
 function applyWorld(){
-  const o=S.origin||new THREE.Vector3();
-  world.scale.set(1,S.ex,1);world.position.set(-o.x,-o.y*S.ex,-o.z);
+  const o=S.origin||new THREE.Vector3(),ex=LAB()?1:S.ex;
+  world.scale.set(1,ex,1);world.position.set(-o.x,-o.y*ex,-o.z);world.updateMatrixWorld(true);
   $("exOut").textContent="×"+S.ex.toLocaleString("es-AR");
 }
 function applyVisibility(){
   const ph=phases();if(S.cur>ph.length-1)S.cur=Math.max(0,ph.length-1);
   S.layers.forEach(l=>{
     if(!l.obj)return;
+    if(LAB()){l.obj.visible=ph.indexOf(l)===S.cur;setOpacity(l.obj,1);return}
     let show=l.visible,mul=1;
     if(l.role==="fase"&&S.mode!=="todas"){
       const i=ph.indexOf(l);
@@ -354,10 +392,26 @@ function addLayer(l,obj){
   S.layers.push(l);
 }
 function newLayer(p){return Object.assign({id:"L"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:"Capa",kind:"model",role:"fase",visible:true,opacity:1,dx:0,dy:0,dz:0,rot:0,rx:0,width:20,size:0,tris:0},p)}
-function removeLayer(l){
+// Saca la capa de la escena sin borrar su archivo guardado (al cambiar de modo)
+function dropLayer(l){
   if(l.obj){world.remove(l.obj);l.obj.traverse(o=>{if(o.isMesh){o.geometry&&o.geometry.dispose();eachMat(o,m=>{m.map&&m.map.dispose();m.dispose()})}})}
   S.layers=S.layers.filter(x=>x!==l);
+}
+function removeLayer(l){
+  dropLayer(l);
   if(l.kind!=="sample")idb.del(l.id);
+  // Sin modelos no queda referencia: el próximo modelo vuelve a fijar el centro
+  if(!S.layers.some(x=>x.kind==="model")){S.origin=null;applyWorld();S.layers.forEach(applyTransform)}
+}
+// Ortomosaico: lo estira y centra sobre la planta de los modelos cargados
+function fitImageToModels(l){
+  const b=new THREE.Box3();
+  S.layers.forEach(m=>{if(m.obj&&m.kind==="model")b.expandByObject(m.obj)});
+  if(b.isEmpty())return false;
+  b.applyMatrix4(world.matrixWorld.clone().invert());
+  const o=S.origin||new THREE.Vector3(),c=b.getCenter(new THREE.Vector3()),r=v=>Math.round(v*100)/100;
+  Object.assign(l,{width:Math.max(0.1,r(b.max.x-b.min.x)),dx:r(c.x-o.x),dz:r(c.z-o.z),dy:r(b.min.y-o.y-0.02),rot:0});
+  applyTransform(l);return true;
 }
 
 /* ---------- Carga de archivos ---------- */
@@ -378,36 +432,38 @@ function loadImagePlane(blob){
 async function buildObject(l,blob){
   if(l.kind==="image"){const g=await loadImagePlane(blob);return g}
   const sc=await loadGLB(blob);
-  if(!S.origin){const b=new THREE.Box3().setFromObject(sc);if(!b.isEmpty()){S.origin=b.getCenter(new THREE.Vector3());S.origin.y=b.min.y}applyWorld();S.layers.forEach(applyTransform)}
+  if(!S.origin&&!LAB()){const b=new THREE.Box3().setFromObject(sc);if(!b.isEmpty()){S.origin=b.getCenter(new THREE.Vector3());S.origin.y=b.min.y}applyWorld();S.layers.forEach(applyTransform)}
   return sc;
 }
-function showLoad(t){$("loadTxt").textContent=t;$("loadOv").hidden=false}
-function hideLoad(){$("loadOv").hidden=true}
+function showLoad(t){$("loadTxt").textContent=t;$("loadOv").hidden=false;$("spaceSel").disabled=true}
+function hideLoad(){$("loadOv").hidden=true;$("spaceSel").disabled=false}
 
 async function handleFiles(list){
   const files=[...list];if(!files.length)return;
   if(S.layers.some(l=>l.kind==="sample")){S.layers.filter(l=>l.kind==="sample").forEach(removeLayer);S.origin=null;applyWorld()}
-  let added=0;
+  let added=0;const imgs=[];
   for(const f of files){
     const ext=(f.name.split(".").pop()||"").toLowerCase();
     let kind=null;
     if(ext==="glb"||ext==="gltf")kind="model";else if(["jpg","jpeg","png","webp"].includes(ext)||(f.type||"").startsWith("image/"))kind="image";
     if(!kind){toast("No se puede abrir ."+ext+": exportalo como GLB desde Metashape");continue}
+    if(kind==="image"&&LAB()){toast("En Laboratorio se cargan modelos GLB. Los ortomosaicos van en Excavación.");continue}
     showLoad("Cargando "+f.name+" ("+fmtB(f.size)+")…");
     const l=newLayer({name:f.name.replace(/\.[^.]+$/,""),kind,role:kind==="image"?"base":"fase",size:f.size});
     try{
-      const obj=await buildObject(l,f);addLayer(l,obj);added++;
+      const obj=await buildObject(l,f);addLayer(l,obj);added++;if(kind==="image")imgs.push(l);
       const ok=await idb.put(l.id,f);if(!ok)$("storeTxt").textContent="Este navegador no permitió guardar los archivos. Se verán hasta cerrar la página.";
     }catch(e){toast("No se pudo leer "+f.name+". Revisá que sea un GLB válido.");console.error(e)}
   }
+  imgs.forEach(fitImageToModels);
   hideLoad();
-  if(added){const ph=phases();S.cur=Math.max(0,ph.length-1);renderAll();fitView();save();toast(added===1?"Capa agregada":added+" capas agregadas")}
+  if(added){const ph=phases();S.cur=Math.max(0,ph.length-1);applyVisibility();renderAll();fitView();save();toast(added===1?"Capa agregada":added+" capas agregadas")}
   else renderAll();
 }
 
 /* ---------- Cámara ---------- */
 function visibleBox(){
-  const b=new THREE.Box3();S.layers.forEach(l=>{if(l.obj&&l.visible)b.expandByObject(l.obj)});
+  const b=new THREE.Box3();S.layers.forEach(l=>{if(l.obj&&(LAB()?l.obj.visible:l.visible))b.expandByObject(l.obj)});
   if(b.isEmpty())b.setFromCenterAndSize(new THREE.Vector3(),new THREE.Vector3(10,2,10));return b;
 }
 function frame(top){
@@ -425,61 +481,70 @@ function buildGrid(){
   if(grid){scene.remove(grid);grid.geometry.dispose();grid.material.dispose();grid=null}
   if(!S.grid)return;
   const b=visibleBox(),s=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());
-  let size=Math.ceil(Math.max(s.x,s.z)*1.3);let step=1;
-  if(size>150){step=10}size=Math.max(4,Math.ceil(size/step)*step);
-  grid=new THREE.GridHelper(size,size/step,new THREE.Color(cssVar("--grid-a")||"#5E6D6A"),new THREE.Color(cssVar("--grid-b")||"#9AA9A6"));
+  // Paso de la grilla a la escala de lo que se ve: 1 m en un sitio, 1 cm en una vasija
+  const ext=Math.max(s.x,s.z,0.001)*1.3;
+  const step=Math.max(0.001,Math.pow(10,Math.floor(Math.log10(ext))-1)),n=Math.max(4,Math.ceil(ext/step));
+  grid=new THREE.GridHelper(n*step,n,new THREE.Color(cssVar("--grid-a")||"#5E6D6A"),new THREE.Color(cssVar("--grid-b")||"#9AA9A6"));
   grid.material.transparent=true;grid.material.opacity=0.55;grid.material.depthWrite=false;
-  grid.position.set(Math.round(c.x),b.min.y-0.005,Math.round(c.z));scene.add(grid);
+  grid.position.set(Math.round(c.x/step)*step,b.min.y-Math.min(0.005,step*0.05),Math.round(c.z/step)*step);scene.add(grid);
+  $("gridLbl").textContent="Grilla de "+(step>=1?Math.round(step)+" m":step>=0.01?Math.round(step*100)+" cm":Math.round(step*1000)+" mm");
 }
 
 /* ---------- Interfaz: panel ---------- */
 function renderLayers(){
   const box=$("layers"),ph=phases();
-  $("layerCount").textContent=S.layers.length?S.layers.length+(S.layers.length===1?" capa":" capas"):"";
+  const lab=LAB(),n=S.layers.length;
+  $("layersH").textContent=lab?"Piezas":"Capas";
+  $("layerCount").textContent=n?n+(lab?(n===1?" pieza":" piezas"):(n===1?" capa":" capas")):"";
   box.innerHTML="";
   S.layers.forEach((l,idx)=>{
     const isCur=l.role==="fase"&&ph.indexOf(l)===S.cur;
     const d=document.createElement("div");d.className="layer"+(isCur?" current":"");
     const warn=l.tris>3e6||l.size>300*1048576;
+    const flat=l.kind==="image"||l.plane;
     const metaTxt=(l.kind==="image"?"Imagen":l.kind==="sample"?"Ejemplo":"Modelo GLB")+(l.tris?" · "+fmtN(l.tris)+" triáng.":"")+(l.size?" · "+fmtB(l.size):"");
     d.innerHTML=
       '<div class="lrow">'+
-        '<button class="icon" data-a="vis" aria-pressed="'+l.visible+'" title="'+(l.visible?"Ocultar":"Mostrar")+'" aria-label="'+(l.visible?"Ocultar":"Mostrar")+' capa">'+(l.visible?ICON.eye:ICON.eyeOff)+'</button>'+
-        '<input type="text" id="nm-'+l.id+'" value="'+esc(l.name)+'" aria-label="Nombre de la capa">'+
+        (lab?'':'<button class="icon" data-a="vis" aria-pressed="'+l.visible+'" title="'+(l.visible?"Ocultar":"Mostrar")+'" aria-label="'+(l.visible?"Ocultar":"Mostrar")+' capa">'+(l.visible?ICON.eye:ICON.eyeOff)+'</button>')+
+        '<input type="text" id="nm-'+l.id+'" value="'+esc(l.name)+'" aria-label="'+(lab?"Nombre de la pieza":"Nombre de la capa")+'">'+
         '<button class="icon" data-a="up" title="Subir" aria-label="Subir"'+(idx===0?" disabled":"")+'>'+ICON.up+'</button>'+
         '<button class="icon" data-a="down" title="Bajar" aria-label="Bajar"'+(idx===S.layers.length-1?" disabled":"")+'>'+ICON.down+'</button>'+
       '</div>'+
-      '<div class="lrow"><select id="rl-'+l.id+'" data-a="role" aria-label="Tipo de capa"><option value="fase"'+(l.role==="fase"?" selected":"")+'>Fase de excavación</option><option value="base"'+(l.role==="base"?" selected":"")+'>Base fija (siempre visible)</option></select>'+
+      '<div class="lrow">'+(lab?'':'<select id="rl-'+l.id+'" data-a="role" aria-label="Tipo de capa"><option value="fase"'+(l.role==="fase"?" selected":"")+'>Fase de excavación</option><option value="base"'+(l.role==="base"?" selected":"")+'>Base fija (siempre visible)</option></select>')+
       '<span class="meta" style="margin-left:auto">'+(warn?'<span class="w">pesado · </span>':'')+esc(metaTxt)+'</span></div>'+
-      '<label class="field" for="op-'+l.id+'">Opacidad <input type="range" id="op-'+l.id+'" data-a="op" min="0.05" max="1" step="0.05" value="'+l.opacity+'"><output>'+Math.round(l.opacity*100)+'%</output></label>'+
-      '<details><summary>Ajustar posición</summary>'+
-        '<div class="grid3">'+
+      (lab?'':'<label class="field" for="op-'+l.id+'">Opacidad <input type="range" id="op-'+l.id+'" data-a="op" min="0.05" max="1" step="0.05" value="'+l.opacity+'"><output>'+Math.round(l.opacity*100)+'%</output></label>')+
+      '<details><summary>'+(lab?"Ajustar":"Ajustar posición")+'</summary>'+
+        (lab?'':'<div class="grid3">'+
           '<label>Este–Oeste (m)<input type="number" id="dx-'+l.id+'" data-k="dx" step="0.05" value="'+l.dx+'"></label>'+
           '<label>Altura (m)<input type="number" id="dy-'+l.id+'" data-k="dy" step="0.01" value="'+l.dy+'"></label>'+
           '<label>Norte–Sur (m)<input type="number" id="dz-'+l.id+'" data-k="dz" step="0.05" value="'+l.dz+'"></label>'+
-        '</div><div class="grid2">'+
+        '</div>')+'<div class="grid2">'+
           '<label>Rotación (°)<input type="number" id="rt-'+l.id+'" data-k="rot" step="1" value="'+l.rot+'"></label>'+
-          ((l.kind==="image"||l.plane)?'<label>Ancho real (m)<input type="number" id="wd-'+l.id+'" data-k="width" step="0.5" min="0.1" value="'+l.width+'"></label>':
+          (flat?'<label>Ancho real (m)<input type="number" id="wd-'+l.id+'" data-k="width" step="0.5" min="0.1" value="'+l.width+'"></label>':
            '<label>Orientación<button class="btn small" type="button" data-a="rx">Girar 90°</button></label>')+
         '</div>'+
         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn small" type="button" data-a="reset">Restablecer</button>'+
-        (l.kind!=="sample"?'<button class="btn small danger" type="button" data-a="del">Quitar capa</button>':'')+'</div>'+
+        (l.kind==="image"?'<button class="btn small" type="button" data-a="fitimg">Calzar con los modelos</button>':'')+
+        (l.kind!=="sample"?'<button class="btn small danger" type="button" data-a="del">'+(lab?"Quitar pieza":"Quitar capa")+'</button>':'')+'</div>'+
       '</details>';
     // eventos
-    d.querySelector('[data-a="vis"]').onclick=()=>{l.visible=!l.visible;applyVisibility();renderLayers();save()};
+    const vis=d.querySelector('[data-a="vis"]');if(vis)vis.onclick=()=>{l.visible=!l.visible;applyVisibility();renderLayers();save()};
     d.querySelector('[data-a="up"]').onclick=()=>moveLayer(idx,-1);
     d.querySelector('[data-a="down"]').onclick=()=>moveLayer(idx,1);
     const nm=d.querySelector("input[type=text]");nm.oninput=()=>{l.name=nm.value;renderTimeline();save()};
-    d.querySelector('[data-a="role"]').onchange=e=>{l.role=e.target.value;applyVisibility();renderAll();save()};
-    const op=d.querySelector('[data-a="op"]');op.oninput=()=>{l.opacity=+op.value;op.nextElementSibling.textContent=Math.round(l.opacity*100)+"%";applyVisibility();save()};
+    const role=d.querySelector('[data-a="role"]');if(role)role.onchange=e=>{l.role=e.target.value;applyVisibility();renderAll();save()};
+    const op=d.querySelector('[data-a="op"]');if(op)op.oninput=()=>{l.opacity=+op.value;op.nextElementSibling.textContent=Math.round(l.opacity*100)+"%";applyVisibility();save()};
     d.querySelectorAll("[data-k]").forEach(inp=>inp.oninput=()=>{const v=parseFloat(inp.value);if(isNaN(v))return;l[inp.dataset.k]=inp.dataset.k==="width"?Math.max(0.1,v):v;applyTransform(l);req();save()});
-    const rx=d.querySelector('[data-a="rx"]');if(rx)rx.onclick=()=>{l.rx=((l.rx||0)+1)%4;applyTransform(l);req();save()};
+    const rx=d.querySelector('[data-a="rx"]');if(rx)rx.onclick=()=>{l.rx=((l.rx||0)+1)%4;applyTransform(l);if(lab)frame(false);req();save()};
     d.querySelector('[data-a="reset"]').onclick=()=>{Object.assign(l,{dx:0,dy:0,dz:0,rot:0,rx:0});applyTransform(l);renderLayers();req();save()};
+    const fit=d.querySelector('[data-a="fitimg"]');if(fit)fit.onclick=()=>{if(fitImageToModels(l)){renderLayers();req();save()}else toast("Primero cargá un modelo GLB para calzar la imagen")};
+    // En Laboratorio, tocar la tarjeta muestra esa pieza
+    if(lab)d.onclick=e=>{if(e.target.closest("input,button,select,details"))return;stopPlay();setCur(idx)};
     const del=d.querySelector('[data-a="del"]');
     if(del){let armed=false,t;del.onclick=()=>{if(!armed){armed=true;del.textContent="Tocá de nuevo para quitar";t=setTimeout(()=>{armed=false;del.textContent="Quitar capa"},3000);return}clearTimeout(t);removeLayer(l);applyVisibility();renderAll();save()}}
     box.appendChild(d);
   });
-  $("emptyOv").hidden=S.layers.length>0;
+  $("emptyOv").hidden=S.layers.length>0||!$("chooseOv").hidden;
   $("sampleBadge").hidden=!S.layers.some(l=>l.kind==="sample");
 }
 function moveLayer(i,dir){const j=i+dir;if(j<0||j>=S.layers.length)return;const a=S.layers;[a[i],a[j]]=[a[j],a[i]];applyVisibility();renderAll();save()}
@@ -488,9 +553,9 @@ function moveLayer(i,dir){const j=i+dir;if(j<0||j>=S.layers.length)return;const 
 function renderTimeline(){
   const ph=phases(),box=$("chips");box.innerHTML="";
   document.querySelectorAll("[data-mode]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===S.mode));
-  if(!ph.length){box.innerHTML='<span class="empty-tl">Marcá al menos una capa como “Fase de excavación” para recorrer la secuencia.</span>';$("tlName").textContent="Sin fases";return}
+  if(!ph.length){box.innerHTML=LAB()?'<span class="empty-tl">Agregá piezas en GLB para verlas acá, de a una.</span>':'<span class="empty-tl">Marcá al menos una capa como “Fase de excavación” para recorrer la secuencia.</span>';$("tlName").textContent=LAB()?"Sin piezas":"Sin fases";return}
   ph.forEach((l,i)=>{
-    const c=document.createElement("button");c.type="button";c.className="chip"+(S.mode==="anterior"&&i===S.cur-1?" ghost":"");
+    const c=document.createElement("button");c.type="button";c.className="chip"+(!LAB()&&S.mode==="anterior"&&i===S.cur-1?" ghost":"");
     c.setAttribute("aria-current",i===S.cur);c.innerHTML="<i>"+(i+1)+"</i>"+esc(l.name);
     c.onclick=()=>{stopPlay();setCur(i)};box.appendChild(c);
   });
@@ -499,7 +564,7 @@ function renderTimeline(){
   $("prevPh").disabled=S.cur<=0&&!playing;$("nextPh").disabled=S.cur>=ph.length-1&&!playing;
   const cur=box.children[S.cur];if(cur&&cur.scrollIntoView)try{cur.scrollIntoView({block:"nearest",inline:"nearest"})}catch(e){}
 }
-function setCur(i){const n=phases().length;if(!n)return;S.cur=Math.max(0,Math.min(n-1,i));applyVisibility();renderTimeline();
+function setCur(i){const n=phases().length;if(!n)return;S.cur=Math.max(0,Math.min(n-1,i));applyVisibility();renderTimeline();if(LAB())frame(false);
   document.querySelectorAll(".layer").forEach((el,k)=>{const l=S.layers[k];el.classList.toggle("current",l&&l.role==="fase"&&phases().indexOf(l)===S.cur)});save()}
 function renderAll(){renderLayers();renderTimeline()}
 
@@ -532,7 +597,9 @@ $("emptySample").onclick=()=>{buildSample();renderAll();fitView()};
 (function(){let armed=false,t;const b=$("btnClear");b.onclick=()=>{
   if(!armed){armed=true;b.textContent="Tocá de nuevo para confirmar";t=setTimeout(()=>{armed=false;b.textContent="Quitar todas las capas"},3000);return}
   clearTimeout(t);armed=false;b.textContent="Quitar todas las capas";stopPlay();
-  [...S.layers].forEach(removeLayer);idb.clear();S.origin=null;S.cur=0;applyWorld();renderAll();buildGrid();req();save();toast("Se quitaron todas las capas")}})();
+  [...S.layers].forEach(removeLayer);S.origin=null;S.cur=0;applyWorld();renderAll();buildGrid();req();save();toast(LAB()?"Se quitaron todas las piezas":"Se quitaron todas las capas")}})();
+$("spaceSel").onchange=e=>switchSpace(e.target.value);
+document.querySelectorAll("[data-space]").forEach(b=>b.onclick=()=>{$("chooseOv").hidden=true;try{localStorage.setItem(SPACE_KEY,b.dataset.space)}catch(e){}switchSpace(b.dataset.space);renderLayers()});
 
 ["dragenter","dragover"].forEach(ev=>view.addEventListener(ev,e=>{e.preventDefault();view.classList.add("drag")}));
 ["dragleave","drop"].forEach(ev=>view.addEventListener(ev,e=>{e.preventDefault();view.classList.remove("drag")}));
@@ -545,17 +612,20 @@ const idb=(()=>{
   async function tx(mode,fn){const db=await open();if(!db)return null;return new Promise(res=>{try{const t=db.transaction("files",mode),st=t.objectStore("files");const r=fn(st);t.oncomplete=()=>res(r&&"result"in r?r.result:true);t.onerror=()=>res(null);t.onabort=()=>res(null)}catch(e){res(null)}})}
   return{put:(k,v)=>tx("readwrite",s=>s.put(v,k)),get:k=>tx("readonly",s=>s.get(k)),del:k=>tx("readwrite",s=>s.delete(k)),clear:()=>tx("readwrite",s=>s.clear())};
 })();
-const KEY="estrato-fases-v1";let saveT=null;
-function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{
+// Cada modo guarda su propia lista de capas; los archivos comparten la base porque los id no se repiten
+const KEYS={exc:"estrato-fases-v1",lab:"estrato-lab-v1"},SPACE_KEY="estrato-modo";let saveT=null;
+function writeState(){try{
   const layers=S.layers.filter(l=>l.kind!=="sample").map(l=>({id:l.id,name:l.name,kind:l.kind,role:l.role,visible:l.visible,opacity:l.opacity,dx:l.dx,dy:l.dy,dz:l.dz,rot:l.rot,rx:l.rx,width:l.width,size:l.size}));
-  localStorage.setItem(KEY,JSON.stringify({layers,origin:S.origin?S.origin.toArray():null,cur:S.cur,mode:S.mode,light:S.light,az:S.az,el:S.el,ex:S.ex,grid:S.grid}));
-}catch(e){}},300)}
+  localStorage.setItem(KEYS[S.space],JSON.stringify({layers,origin:S.origin&&!LAB()?S.origin.toArray():null,cur:S.cur,mode:S.mode,light:S.light,az:S.az,el:S.el,ex:S.ex,grid:S.grid}));
+  localStorage.setItem(SPACE_KEY,S.space);
+}catch(e){}}
+function save(){clearTimeout(saveT);saveT=setTimeout(writeState,300)}
 async function restore(){
-  let st=null;try{st=JSON.parse(localStorage.getItem(KEY)||"null")}catch(e){}
+  let st=null;try{st=JSON.parse(localStorage.getItem(KEYS[S.space])||"null")}catch(e){}
   if(st){["mode","light","az","el","ex","grid"].forEach(k=>{if(st[k]!==undefined)S[k]=st[k]})}
   syncControls();
   if(!st||!st.layers||!st.layers.length)return false;
-  if(st.origin)S.origin=new THREE.Vector3().fromArray(st.origin);applyWorld();
+  if(st.origin&&!LAB())S.origin=new THREE.Vector3().fromArray(st.origin);applyWorld();
   let n=0;
   for(const p of st.layers){
     showLoad("Abriendo "+p.name+"…");
@@ -565,6 +635,36 @@ async function restore(){
   hideLoad();S.cur=st.cur||0;return n>0;
 }
 function syncControls(){$("az").value=S.az;$("el").value=S.el;$("ex").value=S.ex;$("gridChk").checked=S.grid;applyWorld();placeSun()}
+
+/* ---------- Modos: Excavación / Laboratorio ---------- */
+function syncSpaceUI(){
+  const lab=LAB();
+  $("spaceSel").value=S.space;
+  $("brandSub").textContent=lab?"Visor de piezas de laboratorio":"Visor de fases de excavación";
+  $("btnLoadLbl").textContent=$("emptyLoad").textContent=lab?"Agregar piezas":"Agregar capas";
+  $("btnLoad").title=lab?"Agregar modelos GLB de piezas":"Agregar modelos GLB u ortomosaicos";
+  $("emptyH").textContent=lab?"Cargá tus piezas de laboratorio":"Cargá tus modelos de excavación";
+  $("emptyP").textContent=lab?"Agregá los GLB exportados de Metashape, uno por pieza. Cada una se centra sola, no hace falta georreferenciar. También podés arrastrarlos acá.":"Agregá los GLB exportados de Metashape (uno por fase) y, si querés, el ortomosaico del dron en JPG o PNG. También podés arrastrarlos acá.";
+  $("emptySample").hidden=lab;$("exRow").hidden=lab;$("modeSeg").hidden=lab;$("playPh").hidden=lab;
+  $("helpExc").hidden=lab;$("helpLab").hidden=!lab;
+  $("prevPh").title=$("prevPh").ariaLabel=lab?"Pieza anterior":"Fase anterior";
+  $("nextPh").title=$("nextPh").ariaLabel=lab?"Pieza siguiente":"Fase siguiente";
+  fileIn.accept=lab?".glb,.gltf,model/gltf-binary":".glb,.gltf,.jpg,.jpeg,.png,.webp,model/gltf-binary,image/*";
+}
+async function openSpace(){
+  syncSpaceUI();applyWorld();
+  const had=await restore();
+  if(!had&&!LAB())buildSample();
+  applyLightMode();applyVisibility();renderAll();fitView();
+}
+async function switchSpace(sp){
+  if(sp===S.space){syncSpaceUI();return}
+  stopPlay();clearTimeout(saveT);writeState();
+  [...S.layers].forEach(dropLayer);
+  S.space=sp;S.origin=null;S.cur=0;
+  try{localStorage.setItem(SPACE_KEY,sp)}catch(e){}
+  await openSpace();
+}
 
 /* ---------- Ejemplo generado: recinto circular excavado en 4 fases ---------- */
 function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -626,9 +726,11 @@ function buildSample(){
 /* ---------- Inicio ---------- */
 applyTheme();
 (async()=>{
-  const had=await restore();
-  if(!had)buildSample();
-  applyLightMode();applyVisibility();renderAll();fitView();
+  let sp=null;try{sp=localStorage.getItem(SPACE_KEY)}catch(e){}
+  S.space=sp==="lab"?"lab":"exc";
+  // La primera vez se pregunta qué se va a mirar
+  if(!sp)$("chooseOv").hidden=false;
+  await openSpace();
 })();
 })();
 </script>
