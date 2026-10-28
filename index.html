@@ -304,7 +304,7 @@ if(!window.THREE||!THREE.GLTFLoader||!THREE.OrbitControls){
 const S={space:"exc",layers:[],origin:null,cur:0,mode:"anterior",light:"rel",az:135,el:22,ex:1,grid:true,free:false};
 const LAB=()=>S.space==="lab";
 let toastT=null;
-function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200)}
+function toast(msg,ms){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,ms||3200)}
 
 /* ---------- Three ---------- */
 const view=$("view");
@@ -438,6 +438,23 @@ function removeLayer(l){
   // Sin modelos no queda referencia: el próximo modelo vuelve a fijar el centro
   if(!S.layers.some(x=>x.kind==="model")){S.origin=null;applyWorld();S.layers.forEach(applyTransform)}
 }
+// Excavación es un solo lugar: un modelo que cae lejos del resto (otro proyecto de Metashape,
+// otra altura) se trae al centro del sitio, apoyado en su piso, con un desplazamiento que se puede corregir
+function placeNearSite(l){
+  const site=new THREE.Box3();
+  S.layers.forEach(m=>{if(m!==l&&m.obj&&m.kind==="model")site.expandByObject(m.obj)});
+  if(site.isEmpty())return 0;
+  const inv=world.matrixWorld.clone().invert();site.applyMatrix4(inv);
+  l.obj.updateMatrixWorld(true);
+  const b=new THREE.Box3().setFromObject(l.obj).applyMatrix4(inv);
+  const s=site.getSize(new THREE.Vector3());
+  if(site.clone().expandByScalar(Math.max(5,0.5*Math.max(s.x,s.y,s.z))).intersectsBox(b))return 0;
+  const sc=site.getCenter(new THREE.Vector3()),bc=b.getCenter(new THREE.Vector3()),r=v=>Math.round(v*100)/100;
+  const dist=bc.distanceTo(sc);
+  l.dx=r(l.dx+sc.x-bc.x);l.dz=r(l.dz+sc.z-bc.z);l.dy=r(l.dy+site.min.y-b.min.y);
+  applyTransform(l);return dist;
+}
+const fmtDist=d=>d>=1000?(d/1000).toLocaleString("es-AR",{maximumFractionDigits:1})+" km":Math.round(d)+" m";
 // Ortomosaico: lo estira y centra sobre la planta de los modelos cargados
 function fitImageToModels(l){
   const b=new THREE.Box3();
@@ -476,7 +493,10 @@ function hideLoad(){$("loadOv").hidden=true;$("spaceSel").disabled=false}
 async function handleFiles(list){
   const files=[...list];if(!files.length)return;
   if(S.layers.some(l=>l.kind==="sample")){S.layers.filter(l=>l.kind==="sample").forEach(removeLayer);S.origin=null;applyWorld()}
-  let added=0;const imgs=[];
+  let added=0;const imgs=[],notes=[];
+  const isGLB=f=>/\.(glb|gltf)$/i.test(f.name);
+  // En un sitio vacío, un único modelo es la base del lugar (el dron, el terreno): queda siempre visible
+  const siteBase=!LAB()&&!S.layers.some(l=>l.kind==="model"||l.kind==="image")&&files.filter(isGLB).length===1;
   for(const f of files){
     const ext=(f.name.split(".").pop()||"").toLowerCase();
     let kind=null;
@@ -484,16 +504,21 @@ async function handleFiles(list){
     if(!kind){toast("No se puede abrir ."+ext+": exportalo como GLB desde Metashape");continue}
     if(kind==="image"&&LAB()){toast("En Laboratorio se cargan modelos GLB. Los ortomosaicos van en Excavación.");continue}
     showLoad("Cargando "+f.name+" ("+fmtB(f.size)+")…");
-    const l=newLayer({name:f.name.replace(/\.[^.]+$/,""),kind,role:kind==="image"?"base":"fase",size:f.size});
+    const l=newLayer({name:f.name.replace(/\.[^.]+$/,""),kind,role:kind==="image"||(siteBase&&kind==="model")?"base":"fase",size:f.size});
     try{
       const obj=await buildObject(l,f);addLayer(l,obj);added++;if(kind==="image")imgs.push(l);
       if(LAB())openD.add(l.id);
+      else if(kind==="model"){
+        if(l.role==="base")notes.push(l.name+" quedó como base fija del sitio");
+        const d=placeNearSite(l);if(d)notes.push(l.name+" estaba a "+fmtDist(d)+" del resto: la traje al centro del sitio. Acomodala en Ajustar posición");
+      }
       const ok=await idb.put(l.id,f);if(!ok)$("storeTxt").textContent="Este navegador no permitió guardar los archivos. Se verán hasta cerrar la página.";
     }catch(e){toast("No se pudo leer "+f.name+". Revisá que sea un GLB válido.");console.error(e)}
   }
   imgs.forEach(fitImageToModels);
   hideLoad();
-  if(added){const ph=phases();S.cur=Math.max(0,ph.length-1);applyVisibility();renderAll();fitView();save();toast(added===1?"Capa agregada":added+" capas agregadas")}
+  if(added){const ph=phases();S.cur=Math.max(0,ph.length-1);applyVisibility();renderAll();fitView();save();
+    toast(notes.length?notes.join(". ")+".":added===1?(LAB()?"Pieza agregada":"Capa agregada"):added+(LAB()?" piezas agregadas":" capas agregadas"),notes.length?7000:3200)}
   else renderAll();
 }
 
@@ -571,6 +596,7 @@ function renderLayers(){
         '</div>'+
         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn small" type="button" data-a="reset">Restablecer</button>'+
         (l.kind==="image"?'<button class="btn small" type="button" data-a="fitimg">Calzar con los modelos</button>':'')+
+        (l.kind==="model"?'<button class="btn small" type="button" data-a="near" title="Si quedó lejos de las otras capas, la trae al centro del sitio">Traer al sitio</button>':'')+
         (l.kind!=="sample"?'<button class="btn small danger" type="button" data-a="del">Quitar capa</button>':'')+'</div>'+
       '</details>');
     // eventos
@@ -583,6 +609,7 @@ function renderLayers(){
     d.querySelectorAll("[data-k]").forEach(inp=>inp.oninput=()=>{const v=parseFloat(inp.value);if(isNaN(v))return;l[inp.dataset.k]=inp.dataset.k==="width"?Math.max(0.1,v):v;applyTransform(l);req();save()});
     const rx=d.querySelector('[data-a="rx"]');if(rx)rx.onclick=()=>{l.rx=((l.rx||0)+1)%4;applyTransform(l);if(lab)frame(false);req();save()};
     d.querySelector('[data-a="reset"]').onclick=()=>{Object.assign(l,{dx:0,dy:0,dz:0,rot:0,rx:0,q:null});applyTransform(l);renderLayers();if(lab)frame(false);req();save()};
+    const near=d.querySelector('[data-a="near"]');if(near)near.onclick=()=>{const dist=placeNearSite(l);if(dist){renderLayers();fitView();save();toast("La traje "+fmtDist(dist)+" hasta el centro del sitio")}else toast("Esta capa ya está en el sitio (o es la única)")};
     const det=d.querySelector("details");if(det)det.ontoggle=()=>{det.open?openD.add(l.id):openD.delete(l.id)};
     if(lab)bindOri(d,l);
     const fit=d.querySelector('[data-a="fitimg"]');if(fit)fit.onclick=()=>{if(fitImageToModels(l)){renderLayers();req();save()}else toast("Primero cargá un modelo GLB para calzar la imagen")};
