@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1F5F5B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Estrato">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>Estrato Fases 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+/* Layout: visor 3D a pantalla completa + panel de capas a la derecha (abajo en tablet vertical) + barra de secuencia de excavación abajo */
+:root{
+  --bg:#ECF0EE; --surface:#FFFFFF; --ink:#15201E; --muted:#566563; --line:#C6D0CD;
+  --accent:#1F5F5B; --accent-ink:#FFFFFF; --accent-soft:#D5E6E3; --warn:#9A5600;
+  --view-bg:#D7DFDC; --grid-a:#5E6D6A; --grid-b:#9AA9A6;
+  --f-display:"Fraunces",Georgia,"Times New Roman",serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:8px; --tap:44px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101715; --surface:#18221F; --ink:#E3ECE9; --muted:#93A4A0; --line:#2C3A37;
+  --accent:#62B5AC; --accent-ink:#081311; --accent-soft:#1E3734; --warn:#E3A24C;
+  --view-bg:#0C1211; --grid-a:#7D8F8B; --grid-b:#3B4A47; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101715; --surface:#18221F; --ink:#E3ECE9; --muted:#93A4A0; --line:#2C3A37;
+  --accent:#62B5AC; --accent-ink:#081311; --accent-soft:#1E3734; --warn:#E3A24C;
+  --view-bg:#0C1211; --grid-a:#7D8F8B; --grid-b:#3B4A47; color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;overflow:hidden}
+*{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+#app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+.gutter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Barra superior */
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding-block:10px;border-bottom:1px solid var(--line);background:var(--surface)}
+.brand{display:flex;align-items:baseline;gap:8px;margin-right:auto;min-width:0}
+.brand b{font-family:var(--f-display);font-weight:600;font-size:22px;letter-spacing:.2px}
+.brand span{color:var(--muted);font-size:13px;white-space:nowrap}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+
+.btn{min-height:var(--tap);padding:0 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.small{min-height:36px;padding:0 10px;font-size:14px}
+.btn.danger{color:var(--warn)}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.btn svg{width:18px;height:18px;flex:none}
+
+/* Zona central */
+main{display:grid;grid-template-columns:minmax(0,1fr) 350px;min-height:0}
+#view{position:relative;min-height:0;background:var(--view-bg);touch-action:none}
+#view canvas{display:block;width:100%;height:100%}
+.badge{position:absolute;top:12px;left:max(12px,env(safe-area-inset-left,0px));background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:13px;color:var(--muted)}
+.badge strong{color:var(--warn);font-weight:600}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--view-bg) 82%,transparent);text-align:center}
+.overlay .box{max-width:420px;display:grid;gap:12px;justify-items:center}
+.overlay h2{margin:0;font-family:var(--f-display);font-weight:600;font-size:22px;text-wrap:balance}
+.overlay p{margin:0;color:var(--muted)}
+.overlay .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#view.drag::after{content:"Soltá los archivos para agregarlos como capas";position:absolute;inset:10px;border:2px dashed var(--accent);border-radius:12px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--surface) 70%,transparent);font-weight:600}
+
+/* Panel */
+aside{border-left:1px solid var(--line);background:var(--bg);overflow:auto;min-height:0;padding-block:14px;display:grid;align-content:start;gap:18px}
+aside section{display:grid;gap:10px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sec-h h3{margin:0;font-size:12px;letter-spacing:.9px;text-transform:uppercase;color:var(--muted);font-weight:600}
+.layers{display:grid;gap:8px}
+.layer{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px;display:grid;gap:8px}
+.layer.current{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.lrow{display:flex;align-items:center;gap:6px;min-width:0}
+.lrow input[type=text]{flex:1;min-width:0;border:1px solid transparent;border-radius:6px;padding:6px 6px;background:transparent;font-weight:500}
+.lrow input[type=text]:hover,.lrow input[type=text]:focus{border-color:var(--line);background:var(--bg)}
+.icon{width:36px;height:36px;border:1px solid var(--line);border-radius:6px;background:var(--surface);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+.icon svg{width:18px;height:18px}
+.icon[aria-pressed="false"]{color:var(--muted);opacity:.65}
+.icon:disabled{opacity:.35;cursor:default}
+.meta{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.meta .w{color:var(--warn)}
+select{min-height:36px;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:0 8px}
+.field{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;font-size:14px}
+.field output{font-family:var(--f-mono);font-size:12px;color:var(--muted);min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);min-height:28px}
+details{border-top:1px dashed var(--line);padding-top:6px}
+summary{cursor:pointer;font-size:14px;color:var(--muted);min-height:32px;display:flex;align-items:center}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:6px}
+.grid3 label,.grid2 label{display:grid;gap:2px;font-size:12px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:6px}
+.grid3 input,.grid2 input{width:100%;min-height:36px;border:1px solid var(--line);border-radius:6px;background:var(--bg);padding:0 6px;font-family:var(--f-mono);font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;min-height:38px;padding:0 12px;cursor:pointer;font-size:14px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;min-height:36px}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+.help{font-size:14px;color:var(--muted)}
+.help ol{margin:6px 0 0;padding-left:20px;display:grid;gap:6px}
+.help b{color:var(--ink);font-weight:600}
+.help code{font-family:var(--f-mono);font-size:12.5px}
+.store{font-size:13px;color:var(--muted)}
+
+/* Secuencia */
+footer{border-top:1px solid var(--line);background:var(--surface);padding-block:10px;display:grid;gap:8px}
+.tl-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tl-name{font-family:var(--f-display);font-weight:600;font-size:18px;margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-name small{font-family:var(--f-mono);font-weight:400;font-size:12px;color:var(--muted);margin-left:8px}
+.tl-ctrl{display:flex;gap:6px;align-items:center}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.chip{flex:none;min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--bg);cursor:pointer;font-size:13.5px;display:inline-flex;align-items:center;gap:6px}
+.chip i{font-style:normal;font-family:var(--f-mono);font-size:11.5px;color:var(--muted)}
+.chip[aria-current="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.chip[aria-current="true"] i{color:var(--accent-ink);opacity:.8}
+.chip.ghost{border-style:dashed;border-color:var(--accent)}
+.empty-tl{color:var(--muted);font-size:14px}
+
+#toast{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:var(--r);font-size:14px;max-width:calc(100% - 32px);z-index:20}
+
+@media (max-width:860px){
+  main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,40%)}
+  aside{border-left:0;border-top:1px solid var(--line)}
+  .brand span{display:none}
+}
+@media (max-width:520px){
+  .btn .lbl{display:none}
+  .btn{padding:0 11px}
+}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:3s}}
+</style>
+
+</head>
+<body>
+<div id="app">
+  <header class="gutter">
+    <div class="brand"><b>Estrato</b><span>Visor de fases de excavación</span></div>
+    <div class="tools">
+      <button class="btn primary" id="btnLoad" type="button" title="Agregar modelos GLB u ortomosaicos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span class="lbl">Agregar capas</span></button>
+      <button class="btn" id="btnFit" type="button" title="Encuadrar todo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="lbl">Encuadrar</span></button>
+      <button class="btn" id="btnTop" type="button" title="Vista en planta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 8v8M8 12h8"/></svg><span class="lbl">Planta</span></button>
+      <button class="btn" id="btnPersp" type="button" title="Vista oblicua">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l9 4 9-4M3 12l9 4 9-4M12 3l9 4-9 4-9-4z"/></svg><span class="lbl">Oblicua</span></button>
+    </div>
+    <input type="file" id="fileIn" multiple accept=".glb,.gltf,.jpg,.jpeg,.png,.webp,model/gltf-binary,image/*" hidden>
+  </header>
+
+  <main>
+    <div id="view">
+      <div class="badge" id="sampleBadge" hidden><strong>Ejemplo</strong> · modelos generados para mostrar el visor. Se quitan al agregar los tuyos.</div>
+      <div class="overlay" id="emptyOv" hidden>
+        <div class="box">
+          <h2>Cargá tus modelos de excavación</h2>
+          <p>Agregá los GLB exportados de Metashape (uno por fase) y, si querés, el ortomosaico del dron en JPG o PNG. También podés arrastrarlos acá.</p>
+          <div class="row"><button class="btn primary" id="emptyLoad" type="button">Agregar capas</button><button class="btn" id="emptySample" type="button">Ver el ejemplo</button></div>
+        </div>
+      </div>
+      <div class="overlay" id="loadOv" hidden><div class="box"><div class="spinner" aria-hidden="true"></div><p id="loadTxt">Cargando…</p></div></div>
+    </div>
+
+    <aside class="gutter" id="panel">
+      <section>
+        <div class="sec-h"><h3>Capas</h3><span class="meta" id="layerCount"></span></div>
+        <div class="layers" id="layers"></div>
+      </section>
+
+      <section>
+        <div class="sec-h"><h3>Visualización</h3></div>
+        <div class="seg" role="group" aria-label="Iluminación">
+          <button type="button" id="lightTex">Textura original</button><button type="button" id="lightRel">Luz rasante</button>
+        </div>
+        <div id="relCtrls" style="display:grid;gap:6px">
+          <label class="field" for="az">Dirección <input type="range" id="az" min="0" max="360" step="5"><output id="azOut"></output></label>
+          <label class="field" for="el">Altura del sol <input type="range" id="el" min="3" max="80" step="1"><output id="elOut"></output></label>
+        </div>
+        <label class="field" for="ex">Exag. vertical <input type="range" id="ex" min="1" max="4" step="0.25"><output id="exOut"></output></label>
+        <label class="check"><input type="checkbox" id="gridChk"> Grilla de 1 m</label>
+      </section>
+
+      <section>
+        <details class="help">
+          <summary>Cómo preparar los archivos</summary>
+          <ol>
+            <li>En Metashape: <b>File › Export › Export Model</b> y elegí <code>Binary glTF (*.glb)</code>. Un archivo por fase.</li>
+            <li>Procesá todas las fases con la <b>misma referencia</b> (mismos marcadores o coordenadas). Así quedan superpuestas solas, sin tocar nada.</li>
+            <li>Para la tablet, diezmá la malla a menos de 1 millón de caras y usá textura de 4096 px.</li>
+            <li>El ortomosaico va como JPG o PNG. Indicá su ancho en metros en <b>Ajustar posición</b> y movelo hasta que calce.</li>
+            <li>Si un modelo aparece acostado, usá <b>Girar 90°</b> en su capa.</li>
+          </ol>
+        </details>
+      </section>
+
+      <section>
+        <div class="sec-h"><h3>Guardado</h3></div>
+        <p class="store" id="storeTxt">Las capas se guardan en este dispositivo y se vuelven a abrir solas.</p>
+        <div><button class="btn small danger" id="btnClear" type="button">Quitar todas las capas</button></div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="gutter">
+    <div class="tl-top">
+      <div class="tl-name" id="tlName">—</div>
+      <div class="seg" role="group" aria-label="Modo de secuencia">
+        <button type="button" data-mode="solo" title="Mostrar solo la fase elegida">Sola</button><button type="button" data-mode="anterior" title="Fase elegida con la anterior en transparencia">Con anterior</button><button type="button" data-mode="todas" title="Todas las fases visibles">Todas</button>
+      </div>
+      <div class="tl-ctrl">
+        <button class="icon" id="prevPh" type="button" title="Fase anterior" aria-label="Fase anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <button class="icon" id="playPh" type="button" title="Recorrer las fases" aria-label="Recorrer las fases"><svg viewBox="0 0 24 24" fill="currentColor" id="playIco"><path d="M8 5v14l11-7z"/></svg></button>
+        <button class="icon" id="nextPh" type="button" title="Fase siguiente" aria-label="Fase siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <div class="chips" id="chips"></div>
+  </footer>
+</div>
+<div id="toast" hidden></div>
+
+<script src="lib/three.min.js"></script>
+<script src="lib/OrbitControls.js"></script>
+<script src="lib/GLTFLoader.js"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const ICON={
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7c1.7 0 3.2-.4 4.5-1.1"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 15l6-6 6 6"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>'
+};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtN=n=>n>=1e6?(n/1e6).toLocaleString("es-AR",{maximumFractionDigits:1})+" M":n>=1e3?Math.round(n/1e3)+" k":String(n);
+const fmtB=b=>b>=1048576?(b/1048576).toLocaleString("es-AR",{maximumFractionDigits:1})+" MB":Math.round(b/1024)+" kB";
+
+if(!window.THREE||!THREE.GLTFLoader||!THREE.OrbitControls){
+  document.getElementById("view").innerHTML='<div class="overlay"><div class="box"><h2>No se pudo iniciar el visor</h2><p>Las librerías 3D no cargaron. Revisá la conexión a internet y volvé a abrir la página.</p></div></div>';
+  return;
+}
+
+/* ---------- Estado ---------- */
+const S={layers:[],origin:null,cur:0,mode:"anterior",light:"rel",az:135,el:22,ex:1,grid:true};
+let toastT=null;
+function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200)}
+
+/* ---------- Three ---------- */
+const view=$("view");
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:false});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.outputEncoding=THREE.sRGBEncoding;
+view.prepend(renderer.domElement);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(45,1,0.01,5000);
+camera.position.set(8,7,8);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.screenSpacePanning=true;controls.enableDamping=false;controls.maxPolarAngle=Math.PI*0.98;
+const world=new THREE.Group();scene.add(world);
+const hemi=new THREE.HemisphereLight(0xffffff,0x5a4c3c,0.55);scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xffffff,1.25);scene.add(sun);scene.add(sun.target);
+let grid=null;
+
+let needs=true;const req=()=>{needs=true};
+controls.addEventListener("change",req);
+(function loop(){requestAnimationFrame(loop);if(!needs)return;needs=false;renderer.render(scene,camera)})();
+new ResizeObserver(()=>{const w=view.clientWidth,h=view.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();req()}).observe(view);
+
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function applyTheme(){scene.background=new THREE.Color(cssVar("--view-bg")||"#D7DFDC");buildGrid();req()}
+try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme)}catch(e){}
+new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+
+/* ---------- Materiales: textura plana / luz rasante ---------- */
+function prepare(obj){
+  obj.traverse(o=>{
+    if(!o.isMesh)return;
+    const src=Array.isArray(o.material)?o.material:[o.material];
+    const vc=!!(o.geometry&&o.geometry.attributes.color);
+    const tex=[],rel=[];
+    src.forEach(m=>{
+      const p={map:m.map||null,color:m.map?new THREE.Color(0xffffff):(m.color?m.color.clone():new THREE.Color(0xcccccc)),vertexColors:vc,side:THREE.DoubleSide};
+      tex.push(new THREE.MeshBasicMaterial(p));
+      rel.push(new THREE.MeshStandardMaterial(Object.assign({},p,{roughness:1,metalness:0})));
+    });
+    o.userData.mats={tex:Array.isArray(o.material)?tex:tex[0],rel:Array.isArray(o.material)?rel:rel[0]};
+    o.material=o.userData.mats[S.light];
+  });
+}
+function eachMat(obj,fn){obj.traverse(o=>{if(o.isMesh&&o.userData.mats){["tex","rel"].forEach(k=>{const m=o.userData.mats[k];(Array.isArray(m)?m:[m]).forEach(fn)})}})}
+function setOpacity(obj,op){eachMat(obj,m=>{m.opacity=op;m.transparent=op<0.999;m.depthWrite=op>=0.999;m.needsUpdate=true})}
+function applyLightMode(){
+  S.layers.forEach(l=>l.obj&&l.obj.traverse(o=>{if(o.isMesh&&o.userData.mats)o.material=o.userData.mats[S.light]}));
+  $("lightTex").setAttribute("aria-pressed",S.light==="tex");$("lightRel").setAttribute("aria-pressed",S.light==="rel");
+  $("relCtrls").style.opacity=S.light==="rel"?1:.45;
+  placeSun();applyVisibility();
+}
+function placeSun(){
+  const t=controls.target,az=S.az*Math.PI/180,el=S.el*Math.PI/180,d=50;
+  sun.position.set(t.x+Math.sin(az)*Math.cos(el)*d,t.y+Math.sin(el)*d,t.z+Math.cos(az)*Math.cos(el)*d);
+  sun.target.position.copy(t);hemi.intensity=S.el<15?0.35:0.55;
+  $("azOut").textContent=S.az+"°";$("elOut").textContent=S.el+"°";req();
+}
+
+/* ---------- Capas ---------- */
+function phases(){return S.layers.filter(l=>l.role==="fase")}
+function applyTransform(l){
+  if(!l.obj)return;
+  const o=S.origin||new THREE.Vector3();
+  const base=l.kind==="model"?new THREE.Vector3():o;
+  l.obj.position.set(base.x+l.dx,base.y+l.dy,base.z+l.dz);
+  l.obj.rotation.set(0,l.rot*Math.PI/180,0);
+  const inner=l.obj.children[0];if(inner)inner.rotation.x=-(l.rx||0)*Math.PI/2;
+  const s=(l.kind==="image"||l.plane)?l.width:1;l.obj.scale.set(s,s,s);
+}
+function applyWorld(){
+  const o=S.origin||new THREE.Vector3();
+  world.scale.set(1,S.ex,1);world.position.set(-o.x,-o.y*S.ex,-o.z);
+  $("exOut").textContent="×"+S.ex.toLocaleString("es-AR");
+}
+function applyVisibility(){
+  const ph=phases();if(S.cur>ph.length-1)S.cur=Math.max(0,ph.length-1);
+  S.layers.forEach(l=>{
+    if(!l.obj)return;
+    let show=l.visible,mul=1;
+    if(l.role==="fase"&&S.mode!=="todas"){
+      const i=ph.indexOf(l);
+      if(i===S.cur){}else if(S.mode==="anterior"&&i===S.cur-1){mul=0.32}else show=false;
+    }
+    l.obj.visible=show;setOpacity(l.obj,Math.min(1,l.opacity*mul));
+  });
+  req();
+}
+
+let fileInfo={};
+function addLayer(l,obj){
+  const holder=new THREE.Group();holder.add(obj);l.obj=holder;world.add(holder);
+  prepare(holder);applyTransform(l);
+  let tris=0;obj.traverse(o=>{if(o.isMesh&&o.geometry){const g=o.geometry;tris+=g.index?g.index.count/3:g.attributes.position.count/3}});
+  l.tris=Math.round(tris);
+  S.layers.push(l);
+}
+function newLayer(p){return Object.assign({id:"L"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:"Capa",kind:"model",role:"fase",visible:true,opacity:1,dx:0,dy:0,dz:0,rot:0,rx:0,width:20,size:0,tris:0},p)}
+function removeLayer(l){
+  if(l.obj){world.remove(l.obj);l.obj.traverse(o=>{if(o.isMesh){o.geometry&&o.geometry.dispose();eachMat(o,m=>{m.map&&m.map.dispose();m.dispose()})}})}
+  S.layers=S.layers.filter(x=>x!==l);
+  if(l.kind!=="sample")idb.del(l.id);
+}
+
+/* ---------- Carga de archivos ---------- */
+const gltfLoader=new THREE.GLTFLoader();
+function loadGLB(blob){return new Promise((res,rej)=>{const u=URL.createObjectURL(blob);gltfLoader.load(u,g=>{URL.revokeObjectURL(u);res(g.scene)},undefined,e=>{URL.revokeObjectURL(u);rej(e)})})}
+function loadImagePlane(blob){
+  return new Promise((res,rej)=>{
+    const u=URL.createObjectURL(blob),img=new Image();
+    img.onload=()=>{
+      const t=new THREE.Texture(img);t.encoding=THREE.sRGBEncoding;t.anisotropy=renderer.capabilities.getMaxAnisotropy();t.needsUpdate=true;
+      const asp=img.naturalHeight/img.naturalWidth;
+      const m=new THREE.Mesh(new THREE.PlaneGeometry(1,asp),new THREE.MeshBasicMaterial({map:t}));
+      m.rotation.x=-Math.PI/2;const g=new THREE.Group();g.add(m);res(g)};
+    img.onerror=()=>{URL.revokeObjectURL(u);rej(new Error("imagen"))};img.src=u;
+  });
+}
+// En imágenes, el giro de 90° no aplica: el plano ya está acostado dentro de un grupo
+async function buildObject(l,blob){
+  if(l.kind==="image"){const g=await loadImagePlane(blob);return g}
+  const sc=await loadGLB(blob);
+  if(!S.origin){const b=new THREE.Box3().setFromObject(sc);if(!b.isEmpty()){S.origin=b.getCenter(new THREE.Vector3());S.origin.y=b.min.y}applyWorld();S.layers.forEach(applyTransform)}
+  return sc;
+}
+function showLoad(t){$("loadTxt").textContent=t;$("loadOv").hidden=false}
+function hideLoad(){$("loadOv").hidden=true}
+
+async function handleFiles(list){
+  const files=[...list];if(!files.length)return;
+  if(S.layers.some(l=>l.kind==="sample")){S.layers.filter(l=>l.kind==="sample").forEach(removeLayer);S.origin=null;applyWorld()}
+  let added=0;
+  for(const f of files){
+    const ext=(f.name.split(".").pop()||"").toLowerCase();
+    let kind=null;
+    if(ext==="glb"||ext==="gltf")kind="model";else if(["jpg","jpeg","png","webp"].includes(ext)||(f.type||"").startsWith("image/"))kind="image";
+    if(!kind){toast("No se puede abrir ."+ext+": exportalo como GLB desde Metashape");continue}
+    showLoad("Cargando "+f.name+" ("+fmtB(f.size)+")…");
+    const l=newLayer({name:f.name.replace(/\.[^.]+$/,""),kind,role:kind==="image"?"base":"fase",size:f.size});
+    try{
+      const obj=await buildObject(l,f);addLayer(l,obj);added++;
+      const ok=await idb.put(l.id,f);if(!ok)$("storeTxt").textContent="Este navegador no permitió guardar los archivos. Se verán hasta cerrar la página.";
+    }catch(e){toast("No se pudo leer "+f.name+". Revisá que sea un GLB válido.");console.error(e)}
+  }
+  hideLoad();
+  if(added){const ph=phases();S.cur=Math.max(0,ph.length-1);renderAll();fitView();save();toast(added===1?"Capa agregada":added+" capas agregadas")}
+  else renderAll();
+}
+
+/* ---------- Cámara ---------- */
+function visibleBox(){
+  const b=new THREE.Box3();S.layers.forEach(l=>{if(l.obj&&l.visible)b.expandByObject(l.obj)});
+  if(b.isEmpty())b.setFromCenterAndSize(new THREE.Vector3(),new THREE.Vector3(10,2,10));return b;
+}
+function frame(top){
+  const b=visibleBox(),c=b.getCenter(new THREE.Vector3()),s=b.getSize(new THREE.Vector3());
+  const r=Math.max(s.x,s.z,s.y*0.5,0.5)*0.62,dist=r/Math.tan(camera.fov*Math.PI/360)*1.15;
+  camera.near=dist/500;camera.far=dist*60;camera.updateProjectionMatrix();
+  controls.target.copy(c);
+  if(top)camera.position.set(c.x,c.y+dist,c.z+dist*0.0015);
+  else camera.position.copy(c).add(new THREE.Vector3(0.72,0.62,0.86).normalize().multiplyScalar(dist));
+  controls.update();buildGrid();placeSun();req();
+}
+const fitView=()=>frame(false);
+
+function buildGrid(){
+  if(grid){scene.remove(grid);grid.geometry.dispose();grid.material.dispose();grid=null}
+  if(!S.grid)return;
+  const b=visibleBox(),s=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());
+  let size=Math.ceil(Math.max(s.x,s.z)*1.3);let step=1;
+  if(size>150){step=10}size=Math.max(4,Math.ceil(size/step)*step);
+  grid=new THREE.GridHelper(size,size/step,new THREE.Color(cssVar("--grid-a")||"#5E6D6A"),new THREE.Color(cssVar("--grid-b")||"#9AA9A6"));
+  grid.material.transparent=true;grid.material.opacity=0.55;grid.material.depthWrite=false;
+  grid.position.set(Math.round(c.x),b.min.y-0.005,Math.round(c.z));scene.add(grid);
+}
+
+/* ---------- Interfaz: panel ---------- */
+function renderLayers(){
+  const box=$("layers"),ph=phases();
+  $("layerCount").textContent=S.layers.length?S.layers.length+(S.layers.length===1?" capa":" capas"):"";
+  box.innerHTML="";
+  S.layers.forEach((l,idx)=>{
+    const isCur=l.role==="fase"&&ph.indexOf(l)===S.cur;
+    const d=document.createElement("div");d.className="layer"+(isCur?" current":"");
+    const warn=l.tris>3e6||l.size>300*1048576;
+    const metaTxt=(l.kind==="image"?"Imagen":l.kind==="sample"?"Ejemplo":"Modelo GLB")+(l.tris?" · "+fmtN(l.tris)+" triáng.":"")+(l.size?" · "+fmtB(l.size):"");
+    d.innerHTML=
+      '<div class="lrow">'+
+        '<button class="icon" data-a="vis" aria-pressed="'+l.visible+'" title="'+(l.visible?"Ocultar":"Mostrar")+'" aria-label="'+(l.visible?"Ocultar":"Mostrar")+' capa">'+(l.visible?ICON.eye:ICON.eyeOff)+'</button>'+
+        '<input type="text" id="nm-'+l.id+'" value="'+esc(l.name)+'" aria-label="Nombre de la capa">'+
+        '<button class="icon" data-a="up" title="Subir" aria-label="Subir"'+(idx===0?" disabled":"")+'>'+ICON.up+'</button>'+
+        '<button class="icon" data-a="down" title="Bajar" aria-label="Bajar"'+(idx===S.layers.length-1?" disabled":"")+'>'+ICON.down+'</button>'+
+      '</div>'+
+      '<div class="lrow"><select id="rl-'+l.id+'" data-a="role" aria-label="Tipo de capa"><option value="fase"'+(l.role==="fase"?" selected":"")+'>Fase de excavación</option><option value="base"'+(l.role==="base"?" selected":"")+'>Base fija (siempre visible)</option></select>'+
+      '<span class="meta" style="margin-left:auto">'+(warn?'<span class="w">pesado · </span>':'')+esc(metaTxt)+'</span></div>'+
+      '<label class="field" for="op-'+l.id+'">Opacidad <input type="range" id="op-'+l.id+'" data-a="op" min="0.05" max="1" step="0.05" value="'+l.opacity+'"><output>'+Math.round(l.opacity*100)+'%</output></label>'+
+      '<details><summary>Ajustar posición</summary>'+
+        '<div class="grid3">'+
+          '<label>Este–Oeste (m)<input type="number" id="dx-'+l.id+'" data-k="dx" step="0.05" value="'+l.dx+'"></label>'+
+          '<label>Altura (m)<input type="number" id="dy-'+l.id+'" data-k="dy" step="0.01" value="'+l.dy+'"></label>'+
+          '<label>Norte–Sur (m)<input type="number" id="dz-'+l.id+'" data-k="dz" step="0.05" value="'+l.dz+'"></label>'+
+        '</div><div class="grid2">'+
+          '<label>Rotación (°)<input type="number" id="rt-'+l.id+'" data-k="rot" step="1" value="'+l.rot+'"></label>'+
+          ((l.kind==="image"||l.plane)?'<label>Ancho real (m)<input type="number" id="wd-'+l.id+'" data-k="width" step="0.5" min="0.1" value="'+l.width+'"></label>':
+           '<label>Orientación<button class="btn small" type="button" data-a="rx">Girar 90°</button></label>')+
+        '</div>'+
+        '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn small" type="button" data-a="reset">Restablecer</button>'+
+        (l.kind!=="sample"?'<button class="btn small danger" type="button" data-a="del">Quitar capa</button>':'')+'</div>'+
+      '</details>';
+    // eventos
+    d.querySelector('[data-a="vis"]').onclick=()=>{l.visible=!l.visible;applyVisibility();renderLayers();save()};
+    d.querySelector('[data-a="up"]').onclick=()=>moveLayer(idx,-1);
+    d.querySelector('[data-a="down"]').onclick=()=>moveLayer(idx,1);
+    const nm=d.querySelector("input[type=text]");nm.oninput=()=>{l.name=nm.value;renderTimeline();save()};
+    d.querySelector('[data-a="role"]').onchange=e=>{l.role=e.target.value;applyVisibility();renderAll();save()};
+    const op=d.querySelector('[data-a="op"]');op.oninput=()=>{l.opacity=+op.value;op.nextElementSibling.textContent=Math.round(l.opacity*100)+"%";applyVisibility();save()};
+    d.querySelectorAll("[data-k]").forEach(inp=>inp.oninput=()=>{const v=parseFloat(inp.value);if(isNaN(v))return;l[inp.dataset.k]=inp.dataset.k==="width"?Math.max(0.1,v):v;applyTransform(l);req();save()});
+    const rx=d.querySelector('[data-a="rx"]');if(rx)rx.onclick=()=>{l.rx=((l.rx||0)+1)%4;applyTransform(l);req();save()};
+    d.querySelector('[data-a="reset"]').onclick=()=>{Object.assign(l,{dx:0,dy:0,dz:0,rot:0,rx:0});applyTransform(l);renderLayers();req();save()};
+    const del=d.querySelector('[data-a="del"]');
+    if(del){let armed=false,t;del.onclick=()=>{if(!armed){armed=true;del.textContent="Tocá de nuevo para quitar";t=setTimeout(()=>{armed=false;del.textContent="Quitar capa"},3000);return}clearTimeout(t);removeLayer(l);applyVisibility();renderAll();save()}}
+    box.appendChild(d);
+  });
+  $("emptyOv").hidden=S.layers.length>0;
+  $("sampleBadge").hidden=!S.layers.some(l=>l.kind==="sample");
+}
+function moveLayer(i,dir){const j=i+dir;if(j<0||j>=S.layers.length)return;const a=S.layers;[a[i],a[j]]=[a[j],a[i]];applyVisibility();renderAll();save()}
+
+/* ---------- Interfaz: secuencia ---------- */
+function renderTimeline(){
+  const ph=phases(),box=$("chips");box.innerHTML="";
+  document.querySelectorAll("[data-mode]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===S.mode));
+  if(!ph.length){box.innerHTML='<span class="empty-tl">Marcá al menos una capa como “Fase de excavación” para recorrer la secuencia.</span>';$("tlName").textContent="Sin fases";return}
+  ph.forEach((l,i)=>{
+    const c=document.createElement("button");c.type="button";c.className="chip"+(S.mode==="anterior"&&i===S.cur-1?" ghost":"");
+    c.setAttribute("aria-current",i===S.cur);c.innerHTML="<i>"+(i+1)+"</i>"+esc(l.name);
+    c.onclick=()=>{stopPlay();setCur(i)};box.appendChild(c);
+  });
+  const l=ph[S.cur];
+  $("tlName").innerHTML=esc(l?l.name:"")+'<small>'+(S.cur+1)+' de '+ph.length+'</small>';
+  $("prevPh").disabled=S.cur<=0&&!playing;$("nextPh").disabled=S.cur>=ph.length-1&&!playing;
+  const cur=box.children[S.cur];if(cur&&cur.scrollIntoView)try{cur.scrollIntoView({block:"nearest",inline:"nearest"})}catch(e){}
+}
+function setCur(i){const n=phases().length;if(!n)return;S.cur=Math.max(0,Math.min(n-1,i));applyVisibility();renderTimeline();
+  document.querySelectorAll(".layer").forEach((el,k)=>{const l=S.layers[k];el.classList.toggle("current",l&&l.role==="fase"&&phases().indexOf(l)===S.cur)});save()}
+function renderAll(){renderLayers();renderTimeline()}
+
+let playing=null;
+function stopPlay(){if(playing){clearInterval(playing);playing=null;$("playIco").innerHTML='<path d="M8 5v14l11-7z"/>';renderTimeline()}}
+$("playPh").onclick=()=>{
+  if(playing){stopPlay();return}
+  const n=phases().length;if(n<2){toast("Hacen falta al menos dos fases para recorrer");return}
+  if(S.cur>=n-1)setCur(0);
+  $("playIco").innerHTML='<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
+  playing=setInterval(()=>{const n=phases().length;setCur(S.cur>=n-1?0:S.cur+1)},1600);
+};
+$("prevPh").onclick=()=>{stopPlay();setCur(S.cur-1)};
+$("nextPh").onclick=()=>{stopPlay();setCur(S.cur+1)};
+document.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{S.mode=b.dataset.mode;applyVisibility();renderTimeline();save()});
+document.addEventListener("keydown",e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;if(e.key==="ArrowRight"){stopPlay();setCur(S.cur+1)}else if(e.key==="ArrowLeft"){stopPlay();setCur(S.cur-1)}});
+
+/* ---------- Controles generales ---------- */
+const fileIn=$("fileIn");
+$("btnLoad").onclick=$("emptyLoad").onclick=()=>fileIn.click();
+fileIn.onchange=()=>{handleFiles(fileIn.files);fileIn.value=""};
+$("btnFit").onclick=()=>frame(false);$("btnTop").onclick=()=>frame(true);$("btnPersp").onclick=()=>frame(false);
+$("lightTex").onclick=()=>{S.light="tex";applyLightMode();save()};
+$("lightRel").onclick=()=>{S.light="rel";applyLightMode();save()};
+$("az").oninput=e=>{S.az=+e.target.value;placeSun();save()};
+$("el").oninput=e=>{S.el=+e.target.value;placeSun();save()};
+$("ex").oninput=e=>{S.ex=+e.target.value;applyWorld();buildGrid();req();save()};
+$("gridChk").onchange=e=>{S.grid=e.target.checked;buildGrid();req();save()};
+$("emptySample").onclick=()=>{buildSample();renderAll();fitView()};
+(function(){let armed=false,t;const b=$("btnClear");b.onclick=()=>{
+  if(!armed){armed=true;b.textContent="Tocá de nuevo para confirmar";t=setTimeout(()=>{armed=false;b.textContent="Quitar todas las capas"},3000);return}
+  clearTimeout(t);armed=false;b.textContent="Quitar todas las capas";stopPlay();
+  [...S.layers].forEach(removeLayer);idb.clear();S.origin=null;S.cur=0;applyWorld();renderAll();buildGrid();req();save();toast("Se quitaron todas las capas")}})();
+
+["dragenter","dragover"].forEach(ev=>view.addEventListener(ev,e=>{e.preventDefault();view.classList.add("drag")}));
+["dragleave","drop"].forEach(ev=>view.addEventListener(ev,e=>{e.preventDefault();view.classList.remove("drag")}));
+view.addEventListener("drop",e=>{if(e.dataTransfer&&e.dataTransfer.files)handleFiles(e.dataTransfer.files)});
+
+/* ---------- Guardado local (IndexedDB + localStorage) ---------- */
+const idb=(()=>{
+  let dbp=null;
+  function open(){if(dbp)return dbp;dbp=new Promise((res)=>{try{const r=indexedDB.open("estrato-fases",1);r.onupgradeneeded=()=>r.result.createObjectStore("files");r.onsuccess=()=>res(r.result);r.onerror=()=>res(null)}catch(e){res(null)}});return dbp}
+  async function tx(mode,fn){const db=await open();if(!db)return null;return new Promise(res=>{try{const t=db.transaction("files",mode),st=t.objectStore("files");const r=fn(st);t.oncomplete=()=>res(r&&"result"in r?r.result:true);t.onerror=()=>res(null);t.onabort=()=>res(null)}catch(e){res(null)}})}
+  return{put:(k,v)=>tx("readwrite",s=>s.put(v,k)),get:k=>tx("readonly",s=>s.get(k)),del:k=>tx("readwrite",s=>s.delete(k)),clear:()=>tx("readwrite",s=>s.clear())};
+})();
+const KEY="estrato-fases-v1";let saveT=null;
+function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{
+  const layers=S.layers.filter(l=>l.kind!=="sample").map(l=>({id:l.id,name:l.name,kind:l.kind,role:l.role,visible:l.visible,opacity:l.opacity,dx:l.dx,dy:l.dy,dz:l.dz,rot:l.rot,rx:l.rx,width:l.width,size:l.size}));
+  localStorage.setItem(KEY,JSON.stringify({layers,origin:S.origin?S.origin.toArray():null,cur:S.cur,mode:S.mode,light:S.light,az:S.az,el:S.el,ex:S.ex,grid:S.grid}));
+}catch(e){}},300)}
+async function restore(){
+  let st=null;try{st=JSON.parse(localStorage.getItem(KEY)||"null")}catch(e){}
+  if(st){["mode","light","az","el","ex","grid"].forEach(k=>{if(st[k]!==undefined)S[k]=st[k]})}
+  syncControls();
+  if(!st||!st.layers||!st.layers.length)return false;
+  if(st.origin)S.origin=new THREE.Vector3().fromArray(st.origin);applyWorld();
+  let n=0;
+  for(const p of st.layers){
+    showLoad("Abriendo "+p.name+"…");
+    const f=await idb.get(p.id);if(!f)continue;
+    try{const l=newLayer(p);const obj=await buildObject(l,f);addLayer(l,obj);n++}catch(e){console.error(e)}
+  }
+  hideLoad();S.cur=st.cur||0;return n>0;
+}
+function syncControls(){$("az").value=S.az;$("el").value=S.el;$("ex").value=S.ex;$("gridChk").checked=S.grid;applyWorld();placeSun()}
+
+/* ---------- Ejemplo generado: recinto circular excavado en 4 fases ---------- */
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function canvasTex(w,h,draw,rep){const c=document.createElement("canvas");c.width=w;c.height=h;draw(c.getContext("2d"),w,h);const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.anisotropy=4;if(rep){t.wrapS=t.wrapT=THREE.RepeatWrapping}return t}
+function speckle(ctx,w,h,base,amt,r,n){ctx.fillStyle=base;ctx.fillRect(0,0,w,h);for(let i=0;i<n;i++){const v=(r()-.5)*amt;ctx.fillStyle=v>0?"rgba(255,245,225,"+v+")":"rgba(30,20,10,"+(-v)+")";const s=1+r()*3;ctx.fillRect(r()*w,r()*h,s,s)}}
+function buildSample(){
+  const r=rng(7);
+  // Ortomosaico de dron simulado, 20 m de lado
+  const ortho=canvasTex(1024,1024,(ctx,w,h)=>{
+    speckle(ctx,w,h,"#9d8c70",.35,r,26000);
+    for(let i=0;i<70;i++){const x=r()*w,y=r()*h;if(Math.hypot(x-w/2,y-h/2)<220)continue;const rad=12+r()*42;const g=ctx.createRadialGradient(x,y,0,x,y,rad);g.addColorStop(0,"rgba(78,92,58,.95)");g.addColorStop(1,"rgba(78,92,58,0)");ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,rad,0,7);ctx.fill()}
+    ctx.strokeStyle="rgba(190,175,150,.55)";ctx.lineWidth=18;ctx.beginPath();ctx.moveTo(0,h*.82);ctx.bezierCurveTo(w*.3,h*.7,w*.6,h*.95,w,h*.78);ctx.stroke();
+    for(let i=0;i<34;i++){const a=i/34*Math.PI*2,x=w/2+Math.cos(a)*128,y=h/2+Math.sin(a)*128;ctx.fillStyle="rgba(120,118,112,.9)";ctx.beginPath();ctx.ellipse(x,y,8+r()*4,6+r()*3,a,0,7);ctx.fill()}
+  });
+  const oMesh=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshStandardMaterial({map:ortho,roughness:1}));oMesh.rotation.x=-Math.PI/2;
+  const og=new THREE.Group();og.add(oMesh);
+  addLayer(newLayer({name:"Ortomosaico dron",kind:"sample",plane:true,role:"base",width:20,dy:-0.03}),og);
+
+  const soilTop=canvasTex(512,512,(c,w,h)=>speckle(c,w,h,"#97866b",.35,r,9000),true);soilTop.repeat.set(3,3);
+  const fills=["#8c7556","#7d6247","#6a5340","#5d4838"].map(col=>canvasTex(512,512,(c,w,h)=>speckle(c,w,h,col,.4,r,9000),true));
+  fills.forEach(t=>t.repeat.set(2,2));
+  const profile=canvasTex(256,512,(c,w,h)=>{
+    const bands=[["#8f7a5c",0,.34],["#7a6046",.34,.66],["#5c4838",.66,1]];
+    bands.forEach(([col,a,b])=>{c.fillStyle=col;c.fillRect(0,a*h,w,(b-a)*h)});
+    for(let i=0;i<6000;i++){const v=(r()-.5)*.4;c.fillStyle=v>0?"rgba(255,245,225,"+v+")":"rgba(30,20,10,"+(-v)+")";c.fillRect(r()*w,r()*h,1+r()*2,1+r()*2)}
+    c.fillStyle="rgba(40,28,18,.35)";[.34,.66].forEach(y=>c.fillRect(0,y*h-2,w,3));
+  },true);
+  const stoneTex=canvasTex(256,256,(c,w,h)=>speckle(c,w,h,"#8a877f",.5,r,4000),true);
+  const stoneGeo=new THREE.DodecahedronGeometry(0.17,0);
+  const stones=[];
+  [[-0.03,0],[-0.3,.5],[-0.56,0]].forEach(([y,off])=>{for(let i=0;i<30;i++){const a=(i+off)/30*Math.PI*2;stones.push({x:Math.cos(a)*2.48,z:Math.sin(a)*2.48,y,ry:r()*6,sx:1.25+r()*.4,sy:.75+r()*.25,sz:.9+r()*.3})}});
+  const depths=[0,.2,.4,.6],names=["Superficie","Nivel 1 · −20 cm","Nivel 2 · −40 cm","Piso de ocupación"];
+  depths.forEach((d,k)=>{
+    const g=new THREE.Group();
+    const stoneMat=new THREE.MeshStandardMaterial({map:stoneTex,roughness:1});
+    stones.forEach(s=>{const m=new THREE.Mesh(stoneGeo,stoneMat);m.position.set(s.x,s.y,s.z);m.rotation.set(.3,s.ry,.2);m.scale.set(s.sx,s.sy,s.sz);g.add(m)});
+    const ring=new THREE.Mesh(new THREE.RingGeometry(2.4,4.2,64),new THREE.MeshStandardMaterial({map:soilTop,roughness:1}));ring.rotation.x=-Math.PI/2;g.add(ring);
+    if(d===0){
+      const hh=.12,R=(2.4*2.4+hh*hh)/(2*hh),th=Math.asin(2.4/R);
+      const mound=new THREE.Mesh(new THREE.SphereGeometry(R,64,6,0,Math.PI*2,0,th),new THREE.MeshStandardMaterial({map:fills[0],roughness:1}));
+      mound.position.y=hh-R;g.add(mound);
+    }else{
+      const floor=new THREE.Mesh(new THREE.CircleGeometry(2.4,64),new THREE.MeshStandardMaterial({map:fills[k],roughness:1}));floor.rotation.x=-Math.PI/2;floor.position.y=-d;g.add(floor);
+      const pt=profile.clone();pt.needsUpdate=true;pt.repeat.set(6,d/.6);pt.offset.set(0,1-d/.6);
+      const wall=new THREE.Mesh(new THREE.CylinderGeometry(2.4,2.4,d,64,1,true),new THREE.MeshStandardMaterial({map:pt,roughness:1,side:THREE.BackSide}));wall.position.y=-d/2;g.add(wall);
+    }
+    if(k===3){
+      const hearth=new THREE.Mesh(new THREE.CircleGeometry(.36,32),new THREE.MeshStandardMaterial({color:0x2b2420,roughness:1}));hearth.rotation.x=-Math.PI/2;hearth.position.set(.7,-d+.006,-.55);g.add(hearth);
+      const ash=new THREE.Mesh(new THREE.RingGeometry(.36,.5,32),new THREE.MeshStandardMaterial({color:0x6e6660,roughness:1}));ash.rotation.x=-Math.PI/2;ash.position.set(.7,-d+.005,-.55);g.add(ash);
+      const mortar=new THREE.Mesh(new THREE.BoxGeometry(.5,.12,.34),new THREE.MeshStandardMaterial({map:stoneTex,roughness:1}));mortar.position.set(-.9,-d+.06,.6);mortar.rotation.y=.5;g.add(mortar);
+      for(let i=0;i<9;i++){const sh=new THREE.Mesh(new THREE.BoxGeometry(.08+r()*.06,.012,.06+r()*.05),new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(.06,.45,.32+r()*.12),roughness:1}));sh.position.set((r()-.5)*2.6,-d+.008,(r()-.5)*2.2);sh.rotation.y=r()*3;g.add(sh)}
+    }
+    const l=newLayer({name:names[k],kind:"sample",role:"fase"});addLayer(l,g);
+  });
+  S.cur=1;S.mode="anterior";
+  applyVisibility();
+}
+
+/* ---------- Inicio ---------- */
+applyTheme();
+(async()=>{
+  const had=await restore();
+  if(!had)buildSample();
+  applyLightMode();applyVisibility();renderAll();fitView();
+})();
+})();
+</script>
+
+<script>
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}
+</script>
+</body>
+</html>

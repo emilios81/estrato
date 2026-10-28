@@ -1,0 +1,13 @@
+ESTRATO - Visor de fases de excavación (LATDAA)
+
+Esta carpeta es la app completa. Para instalarla en la tablet tiene que estar
+publicada en un sitio con https (por ejemplo latdaa.com.ar/estrato o GitHub Pages).
+
+1. Subí TODA la carpeta "estrato-app" al hosting (manteniendo las subcarpetas lib e icons).
+2. En la tablet abrí la dirección con internet una vez (Chrome en Android, Safari en iPad).
+3. Android: menú de Chrome (tres puntos) > "Instalar app" o "Agregar a la pantalla principal".
+   iPad: botón Compartir > "Agregar a pantalla de inicio".
+4. Abrila una vez desde el ícono con internet. A partir de ahí funciona sin señal.
+
+Los modelos que cargues quedan guardados en la tablet, dentro de la app.
+Si actualizás la app, cambiá "estrato-v1" por "estrato-v2" en sw.js para que la tablet tome la versión nueva.
