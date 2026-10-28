@@ -451,10 +451,52 @@ function placeNearSite(l){
   if(site.clone().expandByScalar(Math.max(5,0.5*Math.max(s.x,s.y,s.z))).intersectsBox(b))return 0;
   const sc=site.getCenter(new THREE.Vector3()),bc=b.getCenter(new THREE.Vector3()),r=v=>Math.round(v*100)/100;
   const dist=bc.distanceTo(sc);
+  // Primero se apoya por el punto más bajo; si hay superficie en común, se afina comparándolas
   l.dx=r(l.dx+sc.x-bc.x);l.dz=r(l.dz+sc.z-bc.z);l.dy=r(l.dy+site.min.y-b.min.y);
-  applyTransform(l);return dist;
+  applyTransform(l);seatOnBase(l);return dist;
 }
 const fmtDist=d=>d>=1000?(d/1000).toLocaleString("es-AR",{maximumFractionDigits:1})+" km":Math.round(d)+" m";
+const fmtLen=d=>d<1?Math.round(d*100)+" cm":d.toLocaleString("es-AR",{maximumFractionDigits:2})+" m";
+
+// Superficie de unos modelos vista en planta: la altura más alta de sus vértices en cada celda de una grilla.
+// Recorre los vértices una sola vez (sin rayos), así anda rápido aun con mallas de millones de triángulos.
+function heightGrid(layers,g){
+  const inv=world.matrixWorld.clone().invert(),M=new THREE.Matrix4(),h=new Float32Array(g.n*g.n).fill(-Infinity);
+  layers.forEach(m=>{m.obj.updateMatrixWorld(true);m.obj.traverse(o=>{
+    if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
+    M.multiplyMatrices(inv,o.matrixWorld);const e=M.elements,p=o.geometry.attributes.position.array;
+    const step=3*Math.max(1,Math.floor(p.length/3/400000));
+    for(let i=0;i<p.length;i+=step){
+      const x=p[i],y=p[i+1],z=p[i+2];
+      const cx=Math.floor((e[0]*x+e[4]*y+e[8]*z+e[12]-g.x0)/g.cs),cz=Math.floor((e[2]*x+e[6]*y+e[10]*z+e[14]-g.z0)/g.cs);
+      if(cx<0||cz<0||cx>=g.n||cz>=g.n)continue;
+      const k=cz*g.n+cx,wy=e[1]*x+e[5]*y+e[9]*z+e[13];if(wy>h[k])h[k]=wy;
+    }
+  })});
+  return h;
+}
+// Cuánto hay que subir (o bajar) un modelo para que su superficie coincida con la de la base donde se superponen.
+// Usa la mediana de las diferencias: un pozo, un árbol o una pared no la mueven.
+function surfaceOffset(l){
+  const others=S.layers.filter(m=>m!==l&&m.obj&&m.kind==="model");
+  const ref=others.some(m=>m.role==="base")?others.filter(m=>m.role==="base"):others;
+  if(!ref.length)return null;
+  const inv=world.matrixWorld.clone().invert();
+  const bl=new THREE.Box3().setFromObject(l.obj).applyMatrix4(inv),br=new THREE.Box3();
+  ref.forEach(m=>br.expandByObject(m.obj));br.applyMatrix4(inv);
+  const x0=Math.max(bl.min.x,br.min.x),x1=Math.min(bl.max.x,br.max.x),z0=Math.max(bl.min.z,br.min.z),z1=Math.min(bl.max.z,br.max.z);
+  if(x1<=x0||z1<=z0)return null;
+  const g={n:64,x0,z0,cs:Math.max(x1-x0,z1-z0)/64};
+  const a=heightGrid(ref,g),b=heightGrid([l],g),d=[];
+  for(let k=0;k<a.length;k++)if(a[k]>-Infinity&&b[k]>-Infinity)d.push(a[k]-b[k]);
+  if(d.length<20)return null;
+  d.sort((p,q)=>p-q);return{dy:d[d.length>>1],n:d.length};
+}
+function seatOnBase(l){
+  const s=surfaceOffset(l);if(!s)return null;
+  const dy=Math.round(s.dy*100)/100;l.dy=Math.round((l.dy+dy)*100)/100;applyTransform(l);
+  return{dy,n:s.n};
+}
 // Ortomosaico: lo estira y centra sobre la planta de los modelos cargados
 function fitImageToModels(l){
   const b=new THREE.Box3();
@@ -596,7 +638,8 @@ function renderLayers(){
         '</div>'+
         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn small" type="button" data-a="reset">Restablecer</button>'+
         (l.kind==="image"?'<button class="btn small" type="button" data-a="fitimg">Calzar con los modelos</button>':'')+
-        (l.kind==="model"?'<button class="btn small" type="button" data-a="near" title="Si quedó lejos de las otras capas, la trae al centro del sitio">Traer al sitio</button>':'')+
+        (l.kind==="model"?'<button class="btn small" type="button" data-a="near" title="Si quedó lejos de las otras capas, la trae al centro del sitio">Traer al sitio</button>'+
+          '<button class="btn small" type="button" data-a="seat" title="Sube o baja la capa hasta que su superficie coincida con la de la base, donde se superponen">Apoyar sobre la base</button>':'')+
         (l.kind!=="sample"?'<button class="btn small danger" type="button" data-a="del">Quitar capa</button>':'')+'</div>'+
       '</details>');
     // eventos
@@ -610,6 +653,12 @@ function renderLayers(){
     const rx=d.querySelector('[data-a="rx"]');if(rx)rx.onclick=()=>{l.rx=((l.rx||0)+1)%4;applyTransform(l);if(lab)frame(false);req();save()};
     d.querySelector('[data-a="reset"]').onclick=()=>{Object.assign(l,{dx:0,dy:0,dz:0,rot:0,rx:0,q:null});applyTransform(l);renderLayers();if(lab)frame(false);req();save()};
     const near=d.querySelector('[data-a="near"]');if(near)near.onclick=()=>{const dist=placeNearSite(l);if(dist){renderLayers();fitView();save();toast("La traje "+fmtDist(dist)+" hasta el centro del sitio")}else toast("Esta capa ya está en el sitio (o es la única)")};
+    const seat=d.querySelector('[data-a="seat"]');if(seat)seat.onclick=()=>{
+      const s=seatOnBase(l);
+      if(!s){toast("No hay superficie en común con la base para comparar");return}
+      renderLayers();req();save();
+      toast(Math.abs(s.dy)<0.02?"Ya estaba apoyada: la diferencia con la base es de "+fmtLen(Math.abs(s.dy)):
+        (s.dy>0?"La subí ":"La bajé ")+fmtLen(Math.abs(s.dy))+", comparando "+s.n+" puntos con la base. Si no te convence, corregí la Altura acá.",7000)};
     const det=d.querySelector("details");if(det)det.ontoggle=()=>{det.open?openD.add(l.id):openD.delete(l.id)};
     if(lab)bindOri(d,l);
     const fit=d.querySelector('[data-a="fitimg"]');if(fit)fit.onclick=()=>{if(fitImageToModels(l)){renderLayers();req();save()}else toast("Primero cargá un modelo GLB para calzar la imagen")};
