@@ -164,6 +164,8 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 8v8M8 12h8"/></svg><span class="lbl">Planta</span></button>
       <button class="btn" id="btnPersp" type="button" title="Vista oblicua">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l9 4 9-4M3 12l9 4 9-4M12 3l9 4-9 4-9-4z"/></svg><span class="lbl">Oblicua</span></button>
+      <button class="btn" id="btnFree" type="button" aria-pressed="false" title="Giro libre en 360°: rotá en cualquier dirección, también por debajo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="9" ry="3.5"/><path d="M12 3c2.5 2.2 2.5 15.8 0 18M12 3c-2.5 2.2-2.5 15.8 0 18"/></svg><span class="lbl">360°</span></button>
     </div>
     <input type="file" id="fileIn" multiple accept=".glb,.gltf,.jpg,.jpeg,.png,.webp,model/gltf-binary,image/*" hidden>
   </header>
@@ -224,7 +226,8 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
             <li>En Metashape: <b>Archivo › Exportar › Exportar modelo</b> y elegí <code>Binary glTF (*.glb)</code>. Un archivo por pieza.</li>
             <li>No hace falta georreferenciar: cada pieza se centra sola y se apoya en una grilla a su escala.</li>
             <li>Elegí qué pieza ver en la barra de abajo o tocando su tarjeta.</li>
-            <li>Si una pieza aparece acostada, usá <b>Girar 90°</b> en <b>Ajustar</b>.</li>
+            <li>Si una pieza aparece acostada, enderezala en <b>Orientar</b>: botones de 90° y deslizadores para el ajuste fino.</li>
+            <li>Con <b>360°</b> la girás libre en cualquier dirección, también por debajo. <b>Encuadrar</b> la vuelve a poner derecha.</li>
           </ol>
         </details>
       </section>
@@ -256,6 +259,7 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
 
 <script src="lib/three.min.js"></script>
 <script src="lib/OrbitControls.js"></script>
+<script src="lib/TrackballControls.js"></script>
 <script src="lib/GLTFLoader.js"></script>
 <script>
 (function(){
@@ -278,7 +282,7 @@ if(!window.THREE||!THREE.GLTFLoader||!THREE.OrbitControls){
 
 /* ---------- Estado ---------- */
 // space: "exc" (sitio y fases superpuestas) o "lab" (piezas sueltas, de a una y centradas)
-const S={space:"exc",layers:[],origin:null,cur:0,mode:"anterior",light:"rel",az:135,el:22,ex:1,grid:true};
+const S={space:"exc",layers:[],origin:null,cur:0,mode:"anterior",light:"rel",az:135,el:22,ex:1,grid:true,free:false};
 const LAB=()=>S.space==="lab";
 let toastT=null;
 function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200)}
@@ -294,15 +298,19 @@ const camera=new THREE.PerspectiveCamera(45,1,0.01,5000);
 camera.position.set(8,7,8);
 const controls=new THREE.OrbitControls(camera,renderer.domElement);
 controls.screenSpacePanning=true;controls.enableDamping=false;controls.maxPolarAngle=Math.PI*0.98;
+// Giro libre (360°): Trackball no conserva el "arriba" y deja dar vueltas completas en cualquier eje
+const free=THREE.TrackballControls?new THREE.TrackballControls(camera,renderer.domElement):null;
+if(free){free.enabled=false;free.rotateSpeed=3.5;free.zoomSpeed=1.2;free.panSpeed=0.8;free.staticMoving=true}
+const ctl=()=>S.free&&free?free:controls;
 const world=new THREE.Group();scene.add(world);
 const hemi=new THREE.HemisphereLight(0xffffff,0x5a4c3c,0.55);scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xffffff,1.25);scene.add(sun);scene.add(sun.target);
 let grid=null;
 
 let needs=true;const req=()=>{needs=true};
-controls.addEventListener("change",req);
-(function loop(){requestAnimationFrame(loop);if(!needs)return;needs=false;renderer.render(scene,camera)})();
-new ResizeObserver(()=>{const w=view.clientWidth,h=view.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();req()}).observe(view);
+controls.addEventListener("change",req);if(free)free.addEventListener("change",req);
+(function loop(){requestAnimationFrame(loop);if(S.free&&free)free.update();if(!needs)return;needs=false;renderer.render(scene,camera)})();
+new ResizeObserver(()=>{const w=view.clientWidth,h=view.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();if(free)free.handleResize();req()}).observe(view);
 
 function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
 function applyTheme(){scene.background=new THREE.Color(cssVar("--view-bg")||"#D7DFDC");buildGrid();req()}
@@ -337,7 +345,7 @@ function applyLightMode(){
   placeSun();applyVisibility();
 }
 function placeSun(){
-  const t=controls.target,az=S.az*Math.PI/180,el=S.el*Math.PI/180,d=50;
+  const t=ctl().target,az=S.az*Math.PI/180,el=S.el*Math.PI/180,d=50;
   sun.position.set(t.x+Math.sin(az)*Math.cos(el)*d,t.y+Math.sin(el)*d,t.z+Math.cos(az)*Math.cos(el)*d);
   sun.target.position.copy(t);hemi.intensity=S.el<15?0.35:0.55;
   $("azOut").textContent=S.az+"°";$("elOut").textContent=S.el+"°";req();
@@ -345,12 +353,20 @@ function placeSun(){
 
 /* ---------- Capas ---------- */
 function phases(){return LAB()?S.layers:S.layers.filter(l=>l.role==="fase")}
+// Orientación de una pieza: cuaternión guardado (l.q) o, si no hay, el viejo "Girar 90°" sobre X
+function pieceQuat(l){return l.q?new THREE.Quaternion().fromArray(l.q):new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-(l.rx||0)*Math.PI/2)}
+const AXES={x:new THREE.Vector3(1,0,0),y:new THREE.Vector3(0,1,0),z:new THREE.Vector3(0,0,1)};
+// Gira sobre los ejes de la pantalla del mundo (no los de la pieza), así cada botón hace siempre lo mismo
+function turnPiece(l,axis,deg){l.q=new THREE.Quaternion().setFromAxisAngle(AXES[axis],deg*Math.PI/180).multiply(pieceQuat(l)).normalize().toArray();l.rx=0;applyTransform(l)}
+function pieceEuler(l){const e=new THREE.Euler().setFromQuaternion(pieceQuat(l),"XYZ");return{x:Math.round(e.x*180/Math.PI),y:Math.round(e.y*180/Math.PI),z:Math.round(e.z*180/Math.PI)}}
+function setPieceEuler(l,v){l.q=new THREE.Quaternion().setFromEuler(new THREE.Euler(v.x*Math.PI/180,v.y*Math.PI/180,v.z*Math.PI/180,"XYZ")).toArray();l.rx=0;applyTransform(l)}
+const openD=new Set();
 function applyTransform(l){
   if(!l.obj)return;
   if(LAB()){
     // Cada pieza se centra sola sobre su propia caja y se apoya en el piso, venga con las coordenadas que venga
     l.obj.position.set(0,0,0);l.obj.rotation.set(0,l.rot*Math.PI/180,0);l.obj.scale.set(1,1,1);
-    const inner=l.obj.children[0];if(inner)inner.rotation.x=-(l.rx||0)*Math.PI/2;
+    const inner=l.obj.children[0];if(inner)inner.quaternion.copy(pieceQuat(l));
     l.obj.updateMatrixWorld(true);
     const b=new THREE.Box3().setFromObject(l.obj);
     if(!b.isEmpty()){const c=b.getCenter(new THREE.Vector3());l.obj.position.set(-c.x+l.dx,-b.min.y+l.dy,-c.z+l.dz)}
@@ -452,6 +468,7 @@ async function handleFiles(list){
     const l=newLayer({name:f.name.replace(/\.[^.]+$/,""),kind,role:kind==="image"?"base":"fase",size:f.size});
     try{
       const obj=await buildObject(l,f);addLayer(l,obj);added++;if(kind==="image")imgs.push(l);
+      if(LAB())openD.add(l.id);
       const ok=await idb.put(l.id,f);if(!ok)$("storeTxt").textContent="Este navegador no permitió guardar los archivos. Se verán hasta cerrar la página.";
     }catch(e){toast("No se pudo leer "+f.name+". Revisá que sea un GLB válido.");console.error(e)}
   }
@@ -470,10 +487,20 @@ function frame(top){
   const b=visibleBox(),c=b.getCenter(new THREE.Vector3()),s=b.getSize(new THREE.Vector3());
   const r=Math.max(s.x,s.z,s.y*0.5,0.5)*0.62,dist=r/Math.tan(camera.fov*Math.PI/360)*1.15;
   camera.near=dist/500;camera.far=dist*60;camera.updateProjectionMatrix();
-  controls.target.copy(c);
+  controls.target.copy(c);if(free)free.target.copy(c);
+  // Encuadrar también endereza la cámara después de girar libre
+  camera.up.set(0,1,0);
   if(top)camera.position.set(c.x,c.y+dist,c.z+dist*0.0015);
   else camera.position.copy(c).add(new THREE.Vector3(0.72,0.62,0.86).normalize().multiplyScalar(dist));
-  controls.update();buildGrid();placeSun();req();
+  if(S.free&&free){camera.lookAt(c);free.update()}else controls.update();
+  buildGrid();placeSun();req();
+}
+function setFree(on){
+  if(!free)return;
+  const t=ctl().target.clone();S.free=on;
+  controls.enabled=!on;free.enabled=on;ctl().target.copy(t);
+  if(on)free.update();else{camera.up.set(0,1,0);camera.lookAt(t);controls.update()}
+  $("btnFree").setAttribute("aria-pressed",on);placeSun();req();
 }
 const fitView=()=>frame(false);
 
@@ -513,20 +540,20 @@ function renderLayers(){
       '<div class="lrow">'+(lab?'':'<select id="rl-'+l.id+'" data-a="role" aria-label="Tipo de capa"><option value="fase"'+(l.role==="fase"?" selected":"")+'>Fase de excavación</option><option value="base"'+(l.role==="base"?" selected":"")+'>Base fija (siempre visible)</option></select>')+
       '<span class="meta" style="margin-left:auto">'+(warn?'<span class="w">pesado · </span>':'')+esc(metaTxt)+'</span></div>'+
       (lab?'':'<label class="field" for="op-'+l.id+'">Opacidad <input type="range" id="op-'+l.id+'" data-a="op" min="0.05" max="1" step="0.05" value="'+l.opacity+'"><output>'+Math.round(l.opacity*100)+'%</output></label>')+
-      '<details><summary>'+(lab?"Ajustar":"Ajustar posición")+'</summary>'+
-        (lab?'':'<div class="grid3">'+
+      (lab?oriPanel(l):'<details'+(openD.has(l.id)?" open":"")+'><summary>Ajustar posición</summary>'+
+        '<div class="grid3">'+
           '<label>Este–Oeste (m)<input type="number" id="dx-'+l.id+'" data-k="dx" step="0.05" value="'+l.dx+'"></label>'+
           '<label>Altura (m)<input type="number" id="dy-'+l.id+'" data-k="dy" step="0.01" value="'+l.dy+'"></label>'+
           '<label>Norte–Sur (m)<input type="number" id="dz-'+l.id+'" data-k="dz" step="0.05" value="'+l.dz+'"></label>'+
-        '</div>')+'<div class="grid2">'+
+        '</div><div class="grid2">'+
           '<label>Rotación (°)<input type="number" id="rt-'+l.id+'" data-k="rot" step="1" value="'+l.rot+'"></label>'+
           (flat?'<label>Ancho real (m)<input type="number" id="wd-'+l.id+'" data-k="width" step="0.5" min="0.1" value="'+l.width+'"></label>':
            '<label>Orientación<button class="btn small" type="button" data-a="rx">Girar 90°</button></label>')+
         '</div>'+
         '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn small" type="button" data-a="reset">Restablecer</button>'+
         (l.kind==="image"?'<button class="btn small" type="button" data-a="fitimg">Calzar con los modelos</button>':'')+
-        (l.kind!=="sample"?'<button class="btn small danger" type="button" data-a="del">'+(lab?"Quitar pieza":"Quitar capa")+'</button>':'')+'</div>'+
-      '</details>';
+        (l.kind!=="sample"?'<button class="btn small danger" type="button" data-a="del">Quitar capa</button>':'')+'</div>'+
+      '</details>');
     // eventos
     const vis=d.querySelector('[data-a="vis"]');if(vis)vis.onclick=()=>{l.visible=!l.visible;applyVisibility();renderLayers();save()};
     d.querySelector('[data-a="up"]').onclick=()=>moveLayer(idx,-1);
@@ -536,16 +563,39 @@ function renderLayers(){
     const op=d.querySelector('[data-a="op"]');if(op)op.oninput=()=>{l.opacity=+op.value;op.nextElementSibling.textContent=Math.round(l.opacity*100)+"%";applyVisibility();save()};
     d.querySelectorAll("[data-k]").forEach(inp=>inp.oninput=()=>{const v=parseFloat(inp.value);if(isNaN(v))return;l[inp.dataset.k]=inp.dataset.k==="width"?Math.max(0.1,v):v;applyTransform(l);req();save()});
     const rx=d.querySelector('[data-a="rx"]');if(rx)rx.onclick=()=>{l.rx=((l.rx||0)+1)%4;applyTransform(l);if(lab)frame(false);req();save()};
-    d.querySelector('[data-a="reset"]').onclick=()=>{Object.assign(l,{dx:0,dy:0,dz:0,rot:0,rx:0});applyTransform(l);renderLayers();req();save()};
+    d.querySelector('[data-a="reset"]').onclick=()=>{Object.assign(l,{dx:0,dy:0,dz:0,rot:0,rx:0,q:null});applyTransform(l);renderLayers();if(lab)frame(false);req();save()};
+    const det=d.querySelector("details");if(det)det.ontoggle=()=>{det.open?openD.add(l.id):openD.delete(l.id)};
+    if(lab)bindOri(d,l);
     const fit=d.querySelector('[data-a="fitimg"]');if(fit)fit.onclick=()=>{if(fitImageToModels(l)){renderLayers();req();save()}else toast("Primero cargá un modelo GLB para calzar la imagen")};
     // En Laboratorio, tocar la tarjeta muestra esa pieza
     if(lab)d.onclick=e=>{if(e.target.closest("input,button,select,details"))return;stopPlay();setCur(idx)};
     const del=d.querySelector('[data-a="del"]');
-    if(del){let armed=false,t;del.onclick=()=>{if(!armed){armed=true;del.textContent="Tocá de nuevo para quitar";t=setTimeout(()=>{armed=false;del.textContent="Quitar capa"},3000);return}clearTimeout(t);removeLayer(l);applyVisibility();renderAll();save()}}
+    if(del){const lbl=del.textContent;let armed=false,t;del.onclick=()=>{if(!armed){armed=true;del.textContent="Tocá de nuevo para quitar";t=setTimeout(()=>{armed=false;del.textContent=lbl},3000);return}clearTimeout(t);removeLayer(l);applyVisibility();renderAll();save()}}
     box.appendChild(d);
   });
   $("emptyOv").hidden=S.layers.length>0||!$("chooseOv").hidden;
   $("sampleBadge").hidden=!S.layers.some(l=>l.kind==="sample");
+}
+// Panel "Orientar" de una pieza de Laboratorio: giros de 90° y ajuste fino en grados
+const ORI=[["x","Adelante"],["z","Costado"],["y","Sobre sí"]];
+function oriPanel(l){
+  const e=pieceEuler(l);
+  return '<details class="ori"'+(openD.has(l.id)?" open":"")+'><summary>Orientar</summary>'+
+    '<div class="grid3">'+ORI.map(([a,t])=>'<button class="btn small" type="button" data-turn="'+a+'" title="Girar 90° '+t.toLowerCase()+'">↻ '+t+'</button>').join("")+'</div>'+
+    '<div style="display:grid;gap:2px;margin-top:6px">'+ORI.map(([a,t])=>
+      '<label class="field" for="o'+a+'-'+l.id+'">'+t+' <input type="range" id="o'+a+'-'+l.id+'" data-ori="'+a+'" min="-180" max="180" step="1" value="'+e[a]+'"><output>'+e[a]+'°</output></label>').join("")+'</div>'+
+    '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn small" type="button" data-a="reset">Restablecer</button>'+
+    '<button class="btn small danger" type="button" data-a="del">Quitar pieza</button></div>'+
+  '</details>';
+}
+function bindOri(d,l){
+  const sl=[...d.querySelectorAll("[data-ori]")];
+  const sync=()=>{const e=pieceEuler(l);sl.forEach(s=>{s.value=e[s.dataset.ori];s.nextElementSibling.textContent=e[s.dataset.ori]+"°"})};
+  d.querySelectorAll("[data-turn]").forEach(b=>b.onclick=()=>{turnPiece(l,b.dataset.turn,90);sync();frame(false);save()});
+  sl.forEach(s=>{
+    s.oninput=()=>{const v={};sl.forEach(x=>v[x.dataset.ori]=+x.value);s.nextElementSibling.textContent=s.value+"°";setPieceEuler(l,v);req()};
+    s.onchange=()=>{buildGrid();req();save()};
+  });
 }
 function moveLayer(i,dir){const j=i+dir;if(j<0||j>=S.layers.length)return;const a=S.layers;[a[i],a[j]]=[a[j],a[i]];applyVisibility();renderAll();save()}
 
@@ -587,6 +637,7 @@ const fileIn=$("fileIn");
 $("btnLoad").onclick=$("emptyLoad").onclick=()=>fileIn.click();
 fileIn.onchange=()=>{handleFiles(fileIn.files);fileIn.value=""};
 $("btnFit").onclick=()=>frame(false);$("btnTop").onclick=()=>frame(true);$("btnPersp").onclick=()=>frame(false);
+$("btnFree").hidden=!free;$("btnFree").onclick=()=>{setFree(!S.free);toast(S.free?"Giro libre: arrastrá en cualquier dirección. Encuadrar la vuelve a poner derecha.":"Giro normal")};
 $("lightTex").onclick=()=>{S.light="tex";applyLightMode();save()};
 $("lightRel").onclick=()=>{S.light="rel";applyLightMode();save()};
 $("az").oninput=e=>{S.az=+e.target.value;placeSun();save()};
@@ -615,7 +666,7 @@ const idb=(()=>{
 // Cada modo guarda su propia lista de capas; los archivos comparten la base porque los id no se repiten
 const KEYS={exc:"estrato-fases-v1",lab:"estrato-lab-v1"},SPACE_KEY="estrato-modo";let saveT=null;
 function writeState(){try{
-  const layers=S.layers.filter(l=>l.kind!=="sample").map(l=>({id:l.id,name:l.name,kind:l.kind,role:l.role,visible:l.visible,opacity:l.opacity,dx:l.dx,dy:l.dy,dz:l.dz,rot:l.rot,rx:l.rx,width:l.width,size:l.size}));
+  const layers=S.layers.filter(l=>l.kind!=="sample").map(l=>({id:l.id,name:l.name,kind:l.kind,role:l.role,visible:l.visible,opacity:l.opacity,dx:l.dx,dy:l.dy,dz:l.dz,rot:l.rot,rx:l.rx,q:l.q||null,width:l.width,size:l.size}));
   localStorage.setItem(KEYS[S.space],JSON.stringify({layers,origin:S.origin&&!LAB()?S.origin.toArray():null,cur:S.cur,mode:S.mode,light:S.light,az:S.az,el:S.el,ex:S.ex,grid:S.grid}));
   localStorage.setItem(SPACE_KEY,S.space);
 }catch(e){}}
@@ -630,7 +681,7 @@ async function restore(){
   for(const p of st.layers){
     showLoad("Abriendo "+p.name+"…");
     const f=await idb.get(p.id);if(!f)continue;
-    try{const l=newLayer(p);const obj=await buildObject(l,f);addLayer(l,obj);n++}catch(e){console.error(e)}
+    try{const l=newLayer(p);const obj=await buildObject(l,f);addLayer(l,obj);n++;if(LAB())openD.add(l.id)}catch(e){console.error(e)}
   }
   hideLoad();S.cur=st.cur||0;return n>0;
 }
