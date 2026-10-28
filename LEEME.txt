@@ -10,4 +10,4 @@ publicada en un sitio con https (por ejemplo latdaa.com.ar/estrato o GitHub Page
 4. Abrila una vez desde el ícono con internet. A partir de ahí funciona sin señal.
 
 Los modelos que cargues quedan guardados en la tablet, dentro de la app.
-Si actualizás la app, subí el número de "estrato-v3" (a "estrato-v4", etc.) en sw.js para que la tablet tome la versión nueva.
+Si actualizás la app, subí el número de "estrato-v4" (a "estrato-v5", etc.) en sw.js para que la tablet tome la versión nueva.

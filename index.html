@@ -134,12 +134,24 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
 .choice b{font-size:16px}
 .choice span{color:var(--muted);font-size:13px}
 
+/* Logo del proyecto: en una esquina del visor, chico y sin capturar toques */
+.brandmark{position:absolute;right:max(12px,env(safe-area-inset-right,0px));bottom:12px;width:120px;height:auto;pointer-events:none;opacity:.92;user-select:none}
+.overlay .logo-big{width:min(240px,60vw);height:auto}
+/* La bienvenida ocupa toda la pantalla: en celular el visor es demasiado bajo para contenerla */
+#chooseOv{position:fixed;z-index:30;overflow:auto;align-items:flex-start;background:color-mix(in srgb,var(--bg) 96%,transparent)}
+#chooseOv .box{margin:auto}
+.credits{font-size:12.5px;line-height:1.5;color:var(--muted);text-wrap:pretty}
+.credits b{color:var(--ink);font-weight:600}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .brandmark,:root:not([data-theme="light"]) .logo-big{filter:brightness(1.25)}}
+:root[data-theme="dark"] .brandmark,:root[data-theme="dark"] .logo-big{filter:brightness(1.25)}
+
 #toast{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:var(--r);font-size:14px;max-width:calc(100% - 32px);z-index:20}
 
 @media (max-width:860px){
   main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,40%)}
   aside{border-left:0;border-top:1px solid var(--line)}
   .brand span{display:none}
+  .brandmark{width:84px;bottom:10px}
 }
 @media (max-width:520px){
   .btn .lbl{display:none}
@@ -172,6 +184,7 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
 
   <main>
     <div id="view">
+      <img class="brandmark" src="icons/expedicion-inka.png" alt="Expedición Inka" width="480" height="382">
       <div class="badge" id="sampleBadge" hidden><strong>Ejemplo</strong> · modelos generados para mostrar el visor. Se quitan al agregar los tuyos.</div>
       <div class="overlay" id="emptyOv" hidden>
         <div class="box">
@@ -183,12 +196,14 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
       <div class="overlay" id="loadOv" hidden><div class="box"><div class="spinner" aria-hidden="true"></div><p id="loadTxt">Cargando…</p></div></div>
       <div class="overlay" id="chooseOv" hidden>
         <div class="box">
+          <img class="logo-big" src="icons/expedicion-inka.png" alt="Expedición Inka" width="480" height="382">
           <h2>¿Qué vas a mirar?</h2>
           <p>Cada modo guarda sus propios modelos. Podés cambiar cuando quieras desde el menú de arriba.</p>
           <div class="choose">
             <button class="btn choice" type="button" data-space="exc"><b>Excavación</b><span>Sitio, dron y fases de excavación, superpuestas</span></button>
             <button class="btn choice" type="button" data-space="lab"><b>Laboratorio</b><span>Vasijas, piezas y objetos sueltos, de a uno</span></button>
           </div>
+          <p class="credits">Creado por: <b>Dr. Emilio A. Villafañez</b>, Universidad Nacional de Catamarca (Argentina) - Fundación Azara - CONICET</p>
         </div>
       </div>
     </div>
@@ -236,6 +251,10 @@ footer{border-top:1px solid var(--line);background:var(--surface);padding-block:
         <div class="sec-h"><h3>Guardado</h3></div>
         <p class="store" id="storeTxt">Las capas se guardan en este dispositivo y se vuelven a abrir solas.</p>
         <div><button class="btn small danger" id="btnClear" type="button">Quitar todas las capas</button></div>
+      </section>
+
+      <section>
+        <p class="credits">Creado por: <b>Dr. Emilio A. Villafañez</b>, Universidad Nacional de Catamarca (Argentina) - Fundación Azara - CONICET</p>
       </section>
     </aside>
   </main>
